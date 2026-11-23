@@ -124,6 +124,10 @@ final class StoryPane extends JScrollPane {
                     host.articlesChanged();
                 } catch (Exception ex) { JOptionPane.showMessageDialog(this, "Could not save: " + ex.getMessage()); }
             }
+        } else if (href.equals("copy:") && current != null) {
+            host.copyStory(current);
+        } else if (href.equals("export:") && current != null) {
+            host.exportStory(current);
         } else if (href.equals("watch:") && current != null) {
             host.addWatch(watchWords(current));
         } else if (href.equals("desk:") && current != null) {

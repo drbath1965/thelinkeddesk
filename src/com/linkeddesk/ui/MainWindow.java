@@ -90,7 +90,7 @@ public final class MainWindow extends JFrame implements Host {
     private volatile com.linkeddesk.alerts.Watches watchRef;
 
     public MainWindow(NewsService service) {
-        super("The Linked Desk 1.5 — world news, linked");
+        super("The Linked Desk " + com.linkeddesk.app.AppPaths.VERSION + " — world news, linked");
         this.service = service;
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         // Fit the screen (also at 150-200% Windows scaling, where the usable area in Java pixels is smaller).
@@ -225,6 +225,10 @@ public final class MainWindow extends JFrame implements Host {
         JMenuBar mb = new JMenuBar();
         JMenu news = new JMenu("News");
         news.add(item("Download news now", KeyEvent.VK_D, e -> fetch()));
+        news.add(item("Export…", KeyEvent.VK_E, e -> exportCurrent()));
+        news.add(item("Copy the open story", 0, e -> { StoryCluster c = openStory(); if (c != null) copyStory(c); else status.setText("Open a story first."); }));
+        news.add(item("Weekly report…", 0, e -> openWeeklyReport()));
+        news.addSeparator();
         news.add(item("Test all feeds", 0, e -> { openHealth(); }));
         news.add(item("Feed health…", 0, e -> openHealth()));
         news.addSeparator();
@@ -248,6 +252,7 @@ public final class MainWindow extends JFrame implements Host {
         JMenu tools = new JMenu("Tools");
         tools.add(item("Settings…", 0, e -> openSettings()));
         tools.add(item("Sources (mute or weight outlets)…", 0, e -> openSources()));
+        tools.add(item("Archive and backup…", 0, e -> openArchive()));
         tools.add(item("Watch a subject…", 0, e -> addWatch("")));
         tools.addSeparator();
         tools.add(item("Calibrate linking…", 0, e -> new CalibrationDialog(this, this).setVisible(true)));
@@ -283,6 +288,7 @@ public final class MainWindow extends JFrame implements Host {
                 watchPanel.reload();
                 markets.reload();
                 installTray();
+                indexInBackground();
                 analyze(() -> {
                     if (service.settings().fetchOnStart() && DailyScheduler.isStale(service.settings())) fetchDaily();
                 });
@@ -595,6 +601,96 @@ public final class MainWindow extends JFrame implements Host {
         healthDialog.toFront();
     }
 
+    // ------------------------------------------------------------------ export, report, archive (P6)
+
+    @Override public void copyStory(StoryCluster c) {
+        ExportUi.copy(com.linkeddesk.export.Exporter.story(c, service.regions()));
+        status.setText("Copied \"" + c.headline + "\" with its " + c.articles.size() + (c.articles.size() == 1 ? " source" : " sources")
+                + ". Paste into Word, Outlook or Gmail and the links come along.");
+    }
+
+    @Override public void exportStory(StoryCluster c) {
+        ExportUi.save(this, this, com.linkeddesk.export.Exporter.story(c, service.regions()), List.of(c));
+    }
+
+    /** The story open in the current tab, if any. */
+    private StoryCluster openStory() {
+        Component t = tabs.getSelectedComponent();
+        StoryBrowser b = t == saved ? saved : t == search ? search.browser() : t == watchPanel ? watchPanel.browser() : t == markets ? markets.browser() : stories;
+        return b.selected();
+    }
+
+    /** News > Export: what's on screen (the briefing, a thread, a storyline, the open story or the whole list). */
+    private void exportCurrent() {
+        Component t = tabs.getSelectedComponent();
+        var reg = service.regions();
+        if (t == briefing) {
+            if (briefing.briefing() == null) { status.setText("The briefing isn't ready yet."); return; }
+            ExportUi.save(this, this, com.linkeddesk.export.Exporter.briefing(briefing.briefing(), service.todaysDigest(), reg),
+                    briefing.briefing().desks().values().stream().flatMap(l -> l.stream().map(com.linkeddesk.analysis.Briefing.Ranked::story)).toList());
+            return;
+        }
+        if (threadList.isShowing() && threadList.getSelectedValue() != null) {
+            StoryThread th = threadList.getSelectedValue();
+            ExportUi.save(this, this, com.linkeddesk.export.Exporter.thread(th, reg), th.stories());
+            return;
+        }
+        if (lineList.isShowing() && lineList.getSelectedValue() != null) {
+            Storyline l = lineList.getSelectedValue();
+            ExportUi.save(this, this, com.linkeddesk.export.Exporter.stories("Storyline: " + l.latest().headline, l.stories(), reg), l.stories());
+            return;
+        }
+        StoryBrowser b = t == saved ? saved : t == stories ? stories : t == search ? search.browser() : t == watchPanel ? watchPanel.browser()
+                : t == markets ? markets.browser() : null;
+        List<StoryCluster> list = b == null ? List.of() : b.shown();
+        StoryCluster open = b == null ? stories.selected() : b.selected();
+        if (open == null && list.isEmpty()) { status.setText("Open a story, a thread or the briefing to export it."); return; }
+        int choice = 0;
+        if (!list.isEmpty()) {
+            Object[] opts = open == null ? new Object[]{"All " + list.size() + " stories in the list", "Cancel"}
+                    : new Object[]{"The open story", "All " + list.size() + " stories in the list", "Cancel"};
+            int c = JOptionPane.showOptionDialog(this, "What would you like to export?", "Export", JOptionPane.DEFAULT_OPTION, JOptionPane.QUESTION_MESSAGE, null, opts, opts[0]);
+            if (c < 0 || c == opts.length - 1) return;
+            choice = open == null ? 1 : c;
+        }
+        if (choice == 0) exportStory(open);
+        else {
+            String title = t == saved ? "Saved stories" : t == search ? "Search results" : t == watchPanel ? "Watchlist" : t == markets ? "Markets"
+                    : "Stories · " + window.getSelectedItem() + (desk.getSelectedItem() instanceof Category cat ? " · " + cat.label() : "");
+            ExportUi.save(this, this, com.linkeddesk.export.Exporter.stories(title, list, reg), list);
+        }
+    }
+
+    private WeeklyReportDialog reportDialog;
+
+    private void openWeeklyReport() {
+        if (reportDialog == null || !reportDialog.isDisplayable()) reportDialog = new WeeklyReportDialog(this, this);
+        reportDialog.setVisible(true);
+        reportDialog.toFront();
+    }
+
+    private void openArchive() {
+        ArchiveDialog d = new ArchiveDialog(this, this);
+        d.setVisible(true);
+        if (d.restored) {
+            Theme.refreshAll(service.settings());
+            topics.reload(null);
+            watchPanel.reload();
+            markets.reload();
+            correctionsChanged();
+        }
+    }
+
+    /** Keeps the search index up to date in the background (the first time it indexes every month). */
+    private void indexInBackground() {
+        Thread t = new Thread(() -> {
+            try { service.refreshIndex(); } catch (Exception ex) { com.linkeddesk.app.Logs.error("Updating the search index", ex); }
+        }, "search-index");
+        t.setDaemon(true);
+        t.setPriority(Thread.MIN_PRIORITY);
+        t.start();
+    }
+
     private void openSources() {
         SourcesDialog d = new SourcesDialog(this, this);
         d.setVisible(true);
@@ -689,6 +785,10 @@ public final class MainWindow extends JFrame implements Host {
                     } catch (Exception ex) {
                         out.append("The briefing email wasn't sent: ").append(ex.getMessage()).append(" (View > Logs).");
                     }
+                    String m = service.maintenance();        // compress old months, index, weekly backup
+                    if (!m.isEmpty()) out.append(' ').append(m);
+                } else {
+                    try { service.refreshIndex(); } catch (Exception ex) { com.linkeddesk.app.Logs.error("Updating the search index", ex); }
                 }
                 return out.toString().strip();
             }
@@ -741,7 +841,7 @@ public final class MainWindow extends JFrame implements Host {
             {"A", "Ask Claude about your news"},
             {"L", "Open your watchlist"},
             {"?", "Show these shortcuts"},
-            {"Ctrl+D / Ctrl+F / Ctrl+L", "Download / Search all news / Logs"},
+            {"Ctrl+D / Ctrl+F / Ctrl+L / Ctrl+E", "Download / Search all news / Logs / Export what's on screen"},
     };
 
     /** Single-key shortcuts, active whenever you're not typing in a text box. */

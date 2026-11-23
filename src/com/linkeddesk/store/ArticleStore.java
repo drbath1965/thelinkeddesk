@@ -102,6 +102,16 @@ public final class ArticleStore {
     }
 
     private void readFrom(Path f, boolean full) throws IOException {
+        if (compressed(f)) {
+            // A compressed month never changes: read it once, whole.
+            if (offsets.containsKey(f)) return;
+            try (java.io.BufferedReader r = reader(f)) {
+                String l;
+                while ((l = r.readLine()) != null) accept(l, full);
+            }
+            offsets.put(f, Files.size(f));
+            return;
+        }
         long start = offsets.getOrDefault(f, 0L);
         long size = Files.size(f);
         if (size <= start) return;
@@ -253,11 +263,13 @@ public final class ArticleStore {
         mem.parallelStream().filter(match).forEach(sink);
         IOException[] err = new IOException[1];
         onDisk.parallelStream().forEach(f -> {
-            try (var lines = Files.lines(f, StandardCharsets.UTF_8)) {
-                lines.filter(lineMayMatch).forEach(l -> {
+            try (java.io.BufferedReader r = reader(f)) {
+                String l;
+                while ((l = r.readLine()) != null) {
+                    if (!lineMayMatch.test(l)) continue;
                     Article a = decode(l);
                     if (a != null && match.test(a)) sink.accept(a);
-                });
+                }
             } catch (IOException | java.io.UncheckedIOException e) {
                 err[0] = e instanceof IOException io ? io : new IOException(e);
             }
@@ -266,6 +278,24 @@ public final class ArticleStore {
     }
 
     public synchronized Article get(String id) { return byId.get(id); }
+
+    private SearchIndex index;
+
+    /** The full-text index over this archive (STO-F03). */
+    public synchronized SearchIndex index() {
+        if (index == null) index = new SearchIndex(this);
+        return index;
+    }
+
+    /**
+     * Every article matching the query (each once), using the full-text index where it can and scanning where it
+     * can't. {@code match} is the full test; it decides, the index only saves reading.
+     */
+    public void find(com.linkeddesk.analysis.SearchQuery q, Predicate<Article> match, Consumer<Article> out) throws IOException {
+        Set<String> seen = java.util.concurrent.ConcurrentHashMap.newKeySet();
+        Consumer<Article> once = a -> { if (seen.add(a.id)) out.accept(a); };
+        if (!index().find(q, match, once)) scan(line -> !q.cannotMatch(line), match, once);
+    }
 
     /** The id under which this article (or the same headline from the same outlet) is stored. */
     public synchronized String canonicalId(Article a) {
@@ -288,19 +318,143 @@ public final class ArticleStore {
         return dir.resolve("articles-" + MONTH.format(Instant.ofEpochMilli(epochMillis).atZone(zone)) + ".tsv");
     }
 
-    private static YearMonth monthOf(Path f) {
+    public static YearMonth monthOf(Path f) {
         String n = f.getFileName().toString();
         try { return YearMonth.parse(n.substring(9, 16)); } catch (RuntimeException e) { return YearMonth.of(1970, 1); }
     }
 
-    private List<Path> files() throws IOException {
+    /**
+     * The monthly files, oldest first: articles-YYYY-MM.tsv, or articles-YYYY-MM.tsv.gz once compressed. (If both
+     * exist for a month, both are read; repeated articles are recognised by their id.)
+     */
+    public List<Path> files() throws IOException {
         List<Path> out = new ArrayList<>();
         if (!Files.isDirectory(dir)) return out;
-        try (DirectoryStream<Path> ds = Files.newDirectoryStream(dir, "articles-*.tsv")) {
-            for (Path p : ds) out.add(p);
+        try (DirectoryStream<Path> ds = Files.newDirectoryStream(dir, "articles-*.tsv{,.gz}")) {
+            for (Path p : ds) if (p.getFileName().toString().length() >= 20) out.add(p);
         }
         out.sort(null);
         return out;
+    }
+
+    public Path dir() { return dir; }
+
+    static boolean compressed(Path f) { return f.getFileName().toString().endsWith(".gz"); }
+
+    /** Reads a monthly file, compressed or not. */
+    public static java.io.BufferedReader reader(Path f) throws IOException { return reader(f, compressed(f)); }
+
+    static java.io.BufferedReader reader(Path f, boolean gz) throws IOException {
+        InputStream in = Files.newInputStream(f);
+        if (gz) in = new java.util.zip.GZIPInputStream(in, 1 << 16);
+        return new java.io.BufferedReader(new java.io.InputStreamReader(in, StandardCharsets.UTF_8), 1 << 16);
+    }
+
+    // ------------------------------------------------------------------ compressing old months (STO-F04)
+
+    /** Months are written as gzip members of about this many bytes, so one article can be read without unpacking the month. */
+    static final int BLOCK = 1 << 16;
+
+    /**
+     * Compresses every month older than {@code keepMonths} months (articles-YYYY-MM.tsv -> .tsv.gz, about a fifth of
+     * the size). Reading stays transparent. Returns the months compressed.
+     */
+    public List<String> compressOlderThan(int keepMonths) throws IOException {
+        YearMonth cutoff = YearMonth.now(zone).minusMonths(keepMonths);
+        List<String> done = new ArrayList<>();
+        for (Path f : files()) {
+            if (compressed(f) || !monthOf(f).isBefore(cutoff)) continue;
+            compress(f);
+            done.add(monthOf(f).toString());
+        }
+        return done;
+    }
+
+    /** Compresses one month's file (keeping anything an earlier compressed copy of the month already holds). */
+    synchronized void compress(Path tsv) throws IOException {
+        Path gz = tsv.resolveSibling(tsv.getFileName() + ".gz");
+        Path tmp = tsv.resolveSibling(tsv.getFileName() + ".gz.tmp");
+        Path blocks = blocksFile(gz);
+        Files.createDirectories(dir);
+        try (FileChannel lockCh = FileChannel.open(dir.resolve(".write.lock"), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+             FileLock ignored = lockCh.lock()) {
+            if (!Files.exists(tsv)) return;
+            StringBuilder table = new StringBuilder();
+            try (java.io.OutputStream out = new java.io.BufferedOutputStream(Files.newOutputStream(tmp), 1 << 16)) {
+                CountingOut counted = new CountingOut(out);
+                long[] uncompressed = {0};
+                ByteArrayOutputStream block = new ByteArrayOutputStream(BLOCK + 8192);
+                java.util.function.Consumer<String> line = l -> {
+                    byte[] b = (l + "\n").getBytes(StandardCharsets.UTF_8);
+                    block.writeBytes(b);
+                };
+                Runnable flush = () -> {
+                    if (block.size() == 0) return;
+                    try {
+                        table.append(uncompressed[0]).append('\t').append(counted.count).append('\n');
+                        java.util.zip.GZIPOutputStream z = new java.util.zip.GZIPOutputStream(new NoClose(counted), 1 << 14);
+                        block.writeTo(z);
+                        z.finish();
+                        uncompressed[0] += block.size();
+                        block.reset();
+                    } catch (IOException e) { throw new java.io.UncheckedIOException(e); }
+                };
+                try {
+                    if (Files.exists(gz)) try (java.io.BufferedReader r = reader(gz)) {
+                        String l;
+                        while ((l = r.readLine()) != null) { if (l.isEmpty()) continue; line.accept(l); if (block.size() >= BLOCK) flush.run(); }
+                    }
+                    try (java.io.BufferedReader r = reader(tsv)) {
+                        String l;
+                        while ((l = r.readLine()) != null) {
+                            if (l.isEmpty() || decode(l) == null) continue;     // a damaged line isn't carried over
+                            line.accept(l);
+                            if (block.size() >= BLOCK) flush.run();
+                        }
+                    }
+                    flush.run();
+                } catch (java.io.UncheckedIOException e) { throw e.getCause(); }
+            }
+            // Check the copy before the original goes: same articles, readable to the end.
+            long want = countLines(tsv) + (Files.exists(gz) ? countLines(gz) : 0), got = countLines(tmp, true);
+            if (got < want - damagedIn(tsv)) { Files.deleteIfExists(tmp); throw new IOException("Compressed copy of " + tsv.getFileName() + " is incomplete; the month was left as it was."); }
+            Files.writeString(blocks, table.toString(), StandardCharsets.UTF_8);
+            Files.move(tmp, gz, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            Files.delete(tsv);
+            offsets.remove(tsv);
+            offsets.put(gz, Files.size(gz));       // already read (as the .tsv)
+            if (fullyLoaded.remove(tsv)) fullyLoaded.add(gz);
+            loadedSignature = signature();
+        }
+    }
+
+    static Path blocksFile(Path gz) { return gz.resolveSibling(gz.getFileName() + ".blocks"); }
+
+    private static long countLines(Path f) throws IOException { return countLines(f, compressed(f)); }
+
+    private static long countLines(Path f, boolean gz) throws IOException {
+        long n = 0;
+        try (java.io.BufferedReader r = reader(f, gz)) { String l; while ((l = r.readLine()) != null) if (!l.isEmpty()) n++; }
+        return n;
+    }
+
+    private static long damagedIn(Path f) throws IOException {
+        long n = 0;
+        try (java.io.BufferedReader r = reader(f)) { String l; while ((l = r.readLine()) != null) if (!l.isEmpty() && decode(l) == null) n++; }
+        return n;
+    }
+
+    private static final class CountingOut extends java.io.FilterOutputStream {
+        long count;
+        CountingOut(java.io.OutputStream o) { super(o); }
+        @Override public void write(int b) throws IOException { out.write(b); count++; }
+        @Override public void write(byte[] b, int off, int len) throws IOException { out.write(b, off, len); count += len; }
+    }
+
+    private static final class NoClose extends java.io.FilterOutputStream {
+        NoClose(java.io.OutputStream o) { super(o); }
+        @Override public void write(byte[] b, int off, int len) throws IOException { out.write(b, off, len); }
+        @Override public void close() throws IOException { flush(); }
     }
 
     private long signature() {
@@ -327,7 +481,7 @@ public final class ArticleStore {
                 a.feedCategory.name(), Long.toString(a.published), Long.toString(a.fetched));
     }
 
-    static Article decode(String line) {
+    public static Article decode(String line) {
         String[] p = line.split("\t", -1);
         if (p.length < 8) return null;
         try {

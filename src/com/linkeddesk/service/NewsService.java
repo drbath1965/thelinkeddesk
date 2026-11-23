@@ -327,15 +327,23 @@ public final class NewsService {
 
     public record SearchResult(List<Article> matches, Analyzer.Result stories, int total, boolean capped, long millis) {}
 
-    public static final int SEARCH_CAP = 3000;
+    public static final int SEARCH_CAP = 1500;
 
     /** Searches every saved article (all history). Results are grouped into stories, newest first. */
     public SearchResult search(SearchQuery q, SearchFilter filter) throws IOException {
         long t0 = System.nanoTime();
+        // Plain words, no filters: the index counts the matches and only the newest are read.
+        if (filter.desk() == null && (filter.source() == null || filter.source().isBlank()) && !sources().any()) {
+            var fast = store.index().newest(q, SEARCH_CAP, filter.from(), filter.to());
+            if (fast != null) {
+                Analyzer.Result stories = Analyzer.analyze(fast.newest(), options());
+                return new SearchResult(fast.newest(), stories, fast.total(), fast.total() > SEARCH_CAP, (System.nanoTime() - t0) / 1_000_000);
+            }
+        }
         List<Article> hits = new ArrayList<>();
         if (!q.isEmpty()) {
             java.util.function.Predicate<Article> fields = fieldTest(q);
-            store.scan(line -> !q.cannotMatch(line), a -> filter.accepts(a) && (!q.hasWords() || q.matches(a)) && fields.test(a), hits::add);
+            store.find(q, a -> filter.accepts(a) && (!q.hasWords() || q.matches(a)) && fields.test(a), hits::add);
         }
         if (q.fields().stream().noneMatch(f -> f.name().equals("source"))) hits = new ArrayList<>(sources().visible(hits));  // muted outlets only on request
         hits.sort(Comparator.comparingLong((Article a) -> a.published).reversed());
@@ -611,7 +619,7 @@ public final class NewsService {
         SearchQuery sq = new SearchQuery(String.join(" OR ", each.stream().map(SearchQuery::text).toList()));
         java.util.Map<Article, int[]> hitsOf = new java.util.HashMap<>();   // per article: which words, in headline?
         var src = sources();
-        store.scan(line -> !sq.cannotMatch(line), a -> a.published >= since && !src.muted(a.source) && sq.matches(a), a -> {
+        store.find(sq, a -> a.published >= since && !src.muted(a.source) && sq.matches(a), a -> {
             Article headlineOnly = new Article(a.id, a.url, a.title, "", "", a.feedCategory, 0, 0);
             int[] h = new int[each.size()];
             for (int i = 0; i < each.size(); i++) if (each.get(i).matches(a)) h[i] = each.get(i).matches(headlineOnly) ? 2 : 1;
@@ -708,6 +716,99 @@ public final class NewsService {
                 .deliver(alert, java.time.LocalTime.now(), settings.quietFrom(), settings.quietTo());
         if (!alert.isEmpty()) Logs.run("notify", (shown == null ? "held for after quiet hours: " : "shown: ") + alert.title(), alert.text(), 0);
         return shown;
+    }
+
+    // ------------------------------------------------------------------ export and the weekly report (EXP-F01, EXP-F02)
+
+    /** Stories from articles published in [from, to). */
+    public Analyzer.Result analyzeRange(long from, long to) {
+        List<Article> in = new ArrayList<>();
+        for (Article a : store.since(from)) if (a.published < to) in.add(a);
+        return tieTickers(Analyzer.analyze(sources().visible(in), options()));
+    }
+
+    /** The report for the week (Monday to Sunday) holding this day. */
+    public com.linkeddesk.export.Doc weeklyReport(java.time.LocalDate anyDay) {
+        java.time.LocalDate mon = com.linkeddesk.export.WeeklyReport.weekStart(anyDay);
+        long from = com.linkeddesk.export.WeeklyReport.startMillis(mon), to = com.linkeddesk.export.WeeklyReport.endMillis(mon);
+        Analyzer.Result r = analyzeRange(from, to);
+        var ws = watches();
+        java.util.Map<String, List<StoryCluster>> watchMap = new java.util.LinkedHashMap<>();
+        var hits = ws.stories(r.stories());
+        for (var w : ws.all()) {
+            List<StoryCluster> l = new ArrayList<>();
+            for (var e : hits.entrySet()) if (e.getValue().contains(w)) l.add(e.getKey());
+            if (!l.isEmpty()) watchMap.put(w.name(), l);
+        }
+        java.util.Map<String, List<StoryCluster>> tickerMap = new java.util.LinkedHashMap<>();
+        var tk = tickers();
+        for (var t : tk.all()) {
+            List<StoryCluster> l = new ArrayList<>();
+            for (StoryCluster c : r.stories()) if (tk.of(c).contains(t.symbol())) l.add(c);
+            if (!l.isEmpty()) tickerMap.put(t.label(), l);
+        }
+        List<com.linkeddesk.ai.Digest> digests = new ArrayList<>();
+        for (int i = 0; i < 7; i++) {
+            try { var dg = com.linkeddesk.ai.Digest.load(AppPaths.home(), mon.plusDays(i)); if (dg != null) digests.add(dg); } catch (IOException ignored) { }
+        }
+        var src = sources();
+        return com.linkeddesk.export.WeeklyReport.build(mon, r, new com.linkeddesk.export.WeeklyReport.Extras(regions(), src::coverage, watchMap, tickerMap, digests));
+    }
+
+    // ------------------------------------------------------------------ archive upkeep (STO-F03, STO-F04)
+
+    /** Brings the search index up to date (the first time: every month). Returns months indexed. */
+    public int refreshIndex() throws IOException {
+        long t0 = System.nanoTime();
+        int n = store.index().refresh();
+        if (n > 0) Logs.run("index", "search index: " + n + (n == 1 ? " month" : " months") + " indexed", "", (System.nanoTime() - t0) / 1_000_000);
+        return n;
+    }
+
+    /** Compresses months older than the setting (6 by default). Returns the months compressed. */
+    public List<String> compressOldMonths() throws IOException {
+        settings.reload();
+        int m = settings.compressAfterMonths();
+        if (m <= 0) return List.of();
+        List<String> done = store.compressOlderThan(m);
+        if (!done.isEmpty()) Logs.run("archive", "compressed " + String.join(", ", done), "", 0);
+        return done;
+    }
+
+    /** Backs up now to the folder in Settings. */
+    public com.linkeddesk.store.Backup.Info backupNow() throws IOException {
+        settings.reload();
+        if (settings.backupFolder().isBlank()) throw new IOException("Choose a backup folder first (Tools > Archive and backup).");
+        var info = com.linkeddesk.store.Backup.create(AppPaths.home(), java.nio.file.Path.of(settings.backupFolder()), AppPaths.VERSION, settings.backupKeep());
+        settings.reload();
+        settings.setBackupLast(System.currentTimeMillis());
+        settings.save();
+        Logs.run("backup", "backed up: " + info.describe(), "", 0);
+        return info;
+    }
+
+    /** After the daily download: compress old months, update the index, and the weekly backup if it's due. */
+    public String maintenance() {
+        List<String> out = new ArrayList<>();
+        try { var c = compressOldMonths(); if (!c.isEmpty()) out.add("Compressed " + String.join(", ", c) + "."); }
+        catch (Exception e) { Logs.error("Compressing old months", e); out.add("Compressing old months failed: " + e.getMessage()); }
+        try { refreshIndex(); } catch (Exception e) { Logs.error("Updating the search index", e); }
+        settings.reload();
+        if (settings.backupWeekly() && !settings.backupFolder().isBlank() && System.currentTimeMillis() - settings.backupLast() > 7L * 86_400_000L - 3_600_000L) {
+            try { out.add("Backed up to " + backupNow().file() + "."); }
+            catch (Exception e) { Logs.error("Weekly backup", e); out.add("The weekly backup failed: " + e.getMessage()); }
+        }
+        return String.join(" ", out);
+    }
+
+    /** Puts a backup back; the app then reads the restored archive and settings. Returns where the old files went. */
+    public java.nio.file.Path restore(java.nio.file.Path zip) throws IOException {
+        java.nio.file.Path aside = com.linkeddesk.store.Backup.restore(zip, AppPaths.home());
+        settings.reload();
+        store.load();
+        synchronized (this) { options = null; watches = null; tickers = null; sources = null; reads = null; }
+        Logs.run("backup", "restored " + zip.getFileName(), aside == null ? "" : "previous files: " + aside, 0);
+        return aside;
     }
 
     /** Shows notifications held during quiet hours, once they're over (the window checks every few minutes). */

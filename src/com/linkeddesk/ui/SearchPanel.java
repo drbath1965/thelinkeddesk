@@ -29,6 +29,7 @@ final class SearchPanel extends JPanel {
     private final JButton saveBtn = new JButton("Save as topic…");
     private final JLabel result = new JLabel(" ");
     private final StoryBrowser browser;
+    StoryBrowser browser() { return browser; }
 
     SearchPanel(Host host) {
         super(new BorderLayout());

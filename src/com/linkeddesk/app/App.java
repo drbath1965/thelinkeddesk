@@ -47,6 +47,9 @@ public final class App {
                 // Email the briefing (once a day, if switched on).
                 try { System.out.println(service.emailBriefing(false)); }
                 catch (Exception e) { Logs.error("Emailing the briefing", e); System.out.println("Email failed: " + e.getMessage()); }
+                // Archive upkeep: compress old months, update the search index, weekly backup if due.
+                String m = service.maintenance();
+                if (!m.isEmpty()) System.out.println(m);
             } catch (NewsService.BusyException busy) {
                 Logs.run("download", "skipped: another download was already running", "", 0);
                 System.out.println("Skipped: " + busy.getMessage());
@@ -54,6 +57,31 @@ public final class App {
                 Logs.error("Daily download failed", e);
                 System.exit(1);
             }
+            return;
+        }
+        if (a.contains("--report")) {
+            // --report [YYYY-MM-DD] [file.docx|.html|.md]: the weekly report for the week holding that day (default: last week).
+            int i = a.indexOf("--report");
+            java.time.LocalDate day = java.time.LocalDate.now().minusDays(7);
+            String file = null;
+            for (int k = i + 1; k < a.size(); k++) {
+                String x = a.get(k);
+                if (x.matches("\\d{4}-\\d{2}-\\d{2}")) day = java.time.LocalDate.parse(x);
+                else if (!x.startsWith("--")) file = x;
+            }
+            service.loadAll();
+            var doc = service.weeklyReport(day);
+            java.nio.file.Path out = java.nio.file.Path.of(file != null ? file
+                    : "Linked Desk weekly report " + com.linkeddesk.export.WeeklyReport.weekStart(day) + ".docx");
+            String n = out.getFileName().toString().toLowerCase(java.util.Locale.ROOT);
+            var fmt = n.endsWith(".html") || n.endsWith(".htm") ? com.linkeddesk.export.Exporter.Format.HTML
+                    : n.endsWith(".md") ? com.linkeddesk.export.Exporter.Format.MARKDOWN : com.linkeddesk.export.Exporter.Format.WORD;
+            com.linkeddesk.export.Exporter.write(doc, List.of(), fmt, out.toAbsolutePath());
+            System.out.println("Weekly report written: " + out.toAbsolutePath());
+            return;
+        }
+        if (a.contains("--backup")) {
+            System.out.println(service.backupNow().describe());
             return;
         }
         if (a.contains("--print-task")) {

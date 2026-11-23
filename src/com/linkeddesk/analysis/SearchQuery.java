@@ -169,6 +169,19 @@ public final class SearchQuery {
      * all be present, so the slower accent-insensitive check can be skipped. Text with accented or other
      * non-ASCII letters is never rejected here, so accent folding still applies to it.
      */
+    /** Text folded as matching sees it: lower case, accents removed. */
+    public static String foldText(String s) { return fold(s); }
+
+    /** True if the query leaves words out (-word). */
+    public boolean hasExcludes() { return !exclude.isEmpty(); }
+
+    /** The words each OR-group needs (folded), for an index to narrow the search; excluded words aren't listed. */
+    public List<List<String>> wordGroups() {
+        List<List<String>> out = new ArrayList<>();
+        for (List<String> g : plain) out.add(List.copyOf(g));
+        return out;
+    }
+
     /** An article's text as matching sees it (folded once, for checking many queries against one article). */
     public static String folded(Article a) { return fold(a.title + " \n " + a.summary + " \n " + a.source); }
 

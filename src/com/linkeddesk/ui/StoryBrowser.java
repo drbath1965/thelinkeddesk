@@ -77,6 +77,9 @@ final class StoryBrowser extends JSplitPane {
     void setTags(java.util.function.Function<StoryCluster, String> tags, boolean highlight) { this.tags = tags; tagHighlight = highlight; refreshRows(); }
 
     StoryCluster selected() { return list.getSelectedValue(); }
+
+    /** The stories in the list, in order (for export). */
+    java.util.List<StoryCluster> shown() { java.util.List<StoryCluster> out = new java.util.ArrayList<>(); for (int i = 0; i < model.size(); i++) out.add(model.get(i)); return out; }
     int storyCount() { return model.size(); }
     boolean contains(String id) { for (int i = 0; i < model.size(); i++) if (model.get(i).id.equals(id)) return true; return false; }
     StoryCluster lookup(String id) { return byId.get(id); }

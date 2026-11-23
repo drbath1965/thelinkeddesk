@@ -22,6 +22,9 @@ public final class AppPaths {
         return p;
     }
 
+    /** The version shown in the title bar and written into backups. */
+    public static final String VERSION = "1.6";
+
     public static Path dataDir() { return home().resolve("data"); }
     public static Path feedsFile() { return home().resolve("feeds.txt"); }
     public static Path settingsFile() { return home().resolve("settings.properties"); }

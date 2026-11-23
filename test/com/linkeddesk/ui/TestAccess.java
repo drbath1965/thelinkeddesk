@@ -12,5 +12,15 @@ public final class TestAccess {
         return Html.story(c, true, null, true, new Html.Extras(false, svc.regions().spread(c), false, (a, b) -> svc.linkChecks().find(a, b)));
     }
 
+    /** What Copy puts on the clipboard. */
+    public record Clip(String html, String text) {
+        public Clip(com.linkeddesk.export.Doc d) {
+            this(get(d, java.awt.datatransfer.DataFlavor.allHtmlFlavor), get(d, java.awt.datatransfer.DataFlavor.stringFlavor));
+        }
+        static String get(com.linkeddesk.export.Doc d, java.awt.datatransfer.DataFlavor f) {
+            try { return (String) ExportUi.selection(d).getTransferData(f); } catch (Exception e) { return ""; }
+        }
+    }
+
     public static String answerPage(ArchiveQA.Answer a) { return Html.answer(a, ""); }
 }

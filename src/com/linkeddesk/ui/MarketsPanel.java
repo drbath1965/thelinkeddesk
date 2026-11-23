@@ -25,6 +25,7 @@ final class MarketsPanel extends JPanel {
     private final DefaultListModel<Tickers.Ticker> model = new DefaultListModel<>();
     private final JList<Tickers.Ticker> list = new JList<>(model);
     private final StoryBrowser browser;
+    StoryBrowser browser() { return browser; }
     private final JLabel info = new JLabel(" ");
     private final Map<String, int[]> counts = new HashMap<>();   // symbol -> {stories, today}
     private final JButton remove = new JButton("Remove");

@@ -23,6 +23,7 @@ import java.util.Random;
 public final class Benchmark {
     public static void main(String[] args) throws Exception {
         int n = args.length > 0 ? Integer.parseInt(args[0]) : 250_000;
+        boolean searchOnly = java.util.Arrays.asList(args).contains("--search-only");
         Path home = Files.createTempDirectory("ld-bench");
         System.setProperty("linkeddesk.home", home.toString());
         Random r = new Random(42);
@@ -33,7 +34,7 @@ public final class Benchmark {
         String[] outlets = new String[120];
         for (int i = 0; i < outlets.length; i++) outlets[i] = "Outlet " + i;
 
-        long now = System.currentTimeMillis(), span = 182L * 24 * 3600_000;
+        long now = System.currentTimeMillis(), span = (n > 400_000 ? 730L : 182L) * 24 * 3600_000;   // 1M: two years
         ArticleStore store = new ArticleStore(home.resolve("data"));
         store.load();
         long t0 = System.nanoTime();
@@ -73,7 +74,7 @@ public final class Benchmark {
         System.out.printf("Start-up (load archive): %.2f s — %,d articles indexed, %,d recent ones in memory, heap in use %.0f MB%n",
                 startup, svc.store().size(), svc.store().loadedCount(), mem / 1e6);
 
-        for (int days : new int[]{1, 7, 30}) {
+        for (int days : searchOnly ? new int[0] : new int[]{1, 7, 30}) {
             long t = System.nanoTime();
             Analyzer.Result res = svc.analyze(days);
             System.out.printf("Analysis, last %2d days: %.2f s — %,d articles -> %,d stories, %,d threads%n",
@@ -94,9 +95,49 @@ public final class Benchmark {
                 System.out.printf("Briefing: %.2f s — %,d stories in the last 24 h%n", (System.nanoTime() - tb) / 1e9, b.stories());
             }
         }
-        for (String q : new String[]{names[3], names[3] + " " + names[10], "\"" + vocab[5] + " " + vocab[9] + "\"", names[200] + " OR " + names[300]}) {
-            NewsService.SearchResult sr = svc.search(new SearchQuery(q), NewsService.SearchFilter.ANY);
-            System.out.printf("Search all history [%s]: %.2f s — %,d matches%n", q, sr.millis() / 1000.0, sr.total());
+        String[] queries = {names[3], names[3] + " " + names[10], "\"" + vocab[5] + " " + vocab[9] + "\"", names[200] + " OR " + names[300], names[600], vocab[2000] + " -" + names[3]};
+        System.out.println("-- without the index (full scan):");
+        long[] scanCounts = new long[queries.length];
+        for (int i = 0; i < queries.length; i++) {
+            SearchQuery q = new SearchQuery(queries[i]);
+            long t = System.nanoTime();
+            java.util.concurrent.atomic.AtomicLong c = new java.util.concurrent.atomic.AtomicLong();
+            svc.store().scan(l -> !q.cannotMatch(l), q::matches, a -> c.incrementAndGet());
+            scanCounts[i] = c.get();
+            System.out.printf("  scan [%s]: %.2f s — %,d matches%n", queries[i], (System.nanoTime() - t) / 1e9, c.get());
+        }
+        long ti = System.nanoTime();
+        int months = svc.refreshIndex();
+        long[] st = svc.store().index().stats();
+        System.out.printf("Building the search index: %.1f s — %d months, %.0f MB%n", (System.nanoTime() - ti) / 1e9, months, st[1] / 1e6);
+        searches(svc, queries, scanCounts, "with the index");
+        long tc = System.nanoTime();
+        var compressed = svc.store().compressOlderThan(6);
+        long gzBytes = Files.list(home.resolve("data")).filter(p -> p.toString().endsWith(".gz")).mapToLong(p -> p.toFile().length()).sum();
+        long tsvBytes = Files.list(home.resolve("data")).filter(p -> p.toString().endsWith(".tsv")).mapToLong(p -> p.toFile().length()).sum();
+        System.out.printf("Compressing %d months older than 6 months: %.1f s — archive now %.0f MB (%.0f MB compressed + %.0f MB current)%n",
+                compressed.size(), (System.nanoTime() - tc) / 1e9, (gzBytes + tsvBytes) / 1e6, gzBytes / 1e6, tsvBytes / 1e6);
+        long ti2 = System.nanoTime();
+        int re = svc.refreshIndex();
+        System.out.printf("Re-indexing the compressed months: %.1f s — %d months%n", (System.nanoTime() - ti2) / 1e9, re);
+        searches(svc, queries, scanCounts, "compressed months, with the index");
+        long t2 = System.nanoTime();
+        NewsService svc2 = new NewsService(new ArticleStore(home.resolve("data")), Settings.load());
+        svc2.loadAll();
+        System.out.printf("Start-up after compression: %.2f s — %,d articles%n", (System.nanoTime() - t2) / 1e9, svc2.store().size());
+    }
+
+    private static void searches(NewsService svc, String[] queries, long[] expect, String label) throws Exception {
+        System.out.println("-- " + label + ":");
+        for (int i = 0; i < queries.length; i++) {
+            SearchQuery q = new SearchQuery(queries[i]);
+            long t = System.nanoTime();
+            java.util.concurrent.atomic.AtomicLong c = new java.util.concurrent.atomic.AtomicLong();
+            svc.store().find(q, q::matches, a -> c.incrementAndGet());
+            double find = (System.nanoTime() - t) / 1e9;
+            NewsService.SearchResult sr = svc.search(q, NewsService.SearchFilter.ANY);
+            System.out.printf("  [%s]: finding %.2f s, with grouping into stories %.2f s — %,d matches%s%n", queries[i], find, sr.millis() / 1000.0, sr.total(),
+                    c.get() == expect[i] && sr.total() == expect[i] ? " (same as the scan)" : " (SCAN FOUND " + expect[i] + ", find " + c.get() + ", search " + sr.total() + "!)");
         }
     }
 

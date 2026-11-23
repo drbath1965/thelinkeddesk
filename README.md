@@ -1,11 +1,11 @@
-# The Linked Desk 1.5
+# The Linked Desk 1.6
 
 A Windows desktop app that downloads world news every day, keeps every article, groups reports of the same event into one story, and links related stories across World, Finance, Politics, Society & Climate, and Tech & Science. Follow your own topics and search everything you've ever downloaded.
 
 ## Run it
 **Easiest (no Java needed):** run `build-installer.bat` once on a PC with the JDK 21+, then use what it makes:
-- `dist\The Linked Desk-1.5.0.msi` if the WiX Toolset 3 is installed (Start-menu entry, desktop shortcut, uninstaller; installs for your user, no admin rights), or
-- `dist\TheLinkedDesk-1.5.0-windows.zip` otherwise: unzip anywhere and run `The Linked Desk.exe`.
+- `dist\The Linked Desk-1.6.0.msi` if the WiX Toolset 3 is installed (Start-menu entry, desktop shortcut, uninstaller; installs for your user, no admin rights), or
+- `dist\TheLinkedDesk-1.6.0-windows.zip` otherwise: unzip anywhere and run `The Linked Desk.exe`.
 
 **Or from the jar:** with Java 21+ installed, double-click **Run The Linked Desk.bat** (or `LinkedDesk.jar`).
 
@@ -23,16 +23,19 @@ Opening the app a second time just brings the open window to the front.
 - **World**: where the stories are happening, on a simplified built-in world map (no internet needed) with a circle per country; click a country or pick it in the list to see its stories.
 - **Ask** (needs an Anthropic API key): ask anything about your saved news ("What happened with the Strait of Hormuz this month?"). The app finds the matching stories and Claude answers from them only, citing each one as [S1], [S2]; click a citation to read the story. Nothing matching = Claude isn't asked.
 - **Topics**: your own subjects (e.g. *hypersonic OR "glide vehicle" -game*). Each is searched across world news (Google News and Bing News) on every daily download. Topic stories also join the main Stories view and link to the rest. Add, edit, pause, delete, or download now. Deleting a topic keeps what it found.
-- **Search**: searches every article ever saved (not just the time window). `"exact phrase"`, `OR`, `-leave out`, and filters: `source:bbc`, `source:"al jazeera"`, `desk:finance`, `after:2026-11-01`, `before:…`, `after:7d`, `region:europe`, `is:unread`, `is:starred` (also in the Stories filter box). **Search live news** fetches fresh articles for the same words now; **Save as topic** turns a search into a daily topic.
+- **Search**: searches every article ever saved (not just the time window), through a full-text index kept in `data\index` (built in the background the first time; about 11 s per million articles). With a million articles a search takes well under a second. `"exact phrase"`, `OR`, `-leave out`, and filters: `source:bbc`, `source:"al jazeera"`, `desk:finance`, `after:2026-11-01`, `before:…`, `after:7d`, `region:europe`, `is:unread`, `is:starred` (also in the Stories filter box). **Search live news** fetches fresh articles for the same words now; **Save as topic** turns a search into a daily topic.
 - **News > Feed health**: every feed's status, last success, failures in a row, new articles per day and last error. A feed failing 7 times in a row is paused and retried weekly. Retry, change address, remove, or **Test all feeds**.
 - **View > Logs**: every download in the last 30 days with per-feed detail, plus the error log.
 - **Correct the app** on any story: **✓ Right / ✗ Wrong** on each link (right links are always shown; wrong ones are hidden and the words behind them count less), **Not this story** on an article that was grouped wrongly, and **Move to another desk…** (this story, everything from an outlet, or every headline with a word; optionally shown in a second desk too).
 - **Tools > Sources**: every outlet with its article count. **Mute** one to hide it from Stories, the Briefing, Search and Ask (its articles stay in the archive; search `source:` still finds them), or give it a **weight** (0.25-5) so it counts more or less toward *Most covered*. **Mute this outlet** also sits under every article.
 - **Notifications** (Settings): after each download, one Windows notification groups the new matches by watch ("Fed 2 · Hormuz 1" and the first headline), from the window or from the daily task when the app is closed. Optional: new links between desks. **Quiet hours** (e.g. 22:00-07:00) hold them; they're shown together afterwards. Clicking the tray icon opens the Watchlist.
 - **Email digest** (Settings): the briefing by email once a day after the daily download, with headlines linking to the articles and a plain-text version. Any SMTP server (STARTTLS, SSL); the password is stored encrypted. For Gmail use smtp.gmail.com, port 587, STARTTLS and an **app password**. **Send test email now** tries it at once.
+- **Export** (News > Export…, Ctrl+E): what's on screen (the open story, every story in the list, a thread, a storyline or the briefing) as a web page (.html), a Word document (.docx), Markdown (.md) or a spreadsheet for Excel (.csv, one row per article). Every headline keeps its link. **Copy** on any story puts it on the clipboard with its sources; pasted into Word, Outlook or Gmail the links come along.
+- **News > Weekly report…**: any week in your archive (Monday to Sunday): top stories per desk, how stories developed, connections across desks, threads, your watchlist and tickers, and what Claude's daily digests said to watch. Preview it, then save as Word, HTML or Markdown (Word can save it as PDF), or copy it.
+- **Tools > Archive and backup**: the archive's size and the search index; **compress months older than 6 months** (to about a fifth of the size, still read and searched as before; done after the daily download); **export any month as CSV** for Excel; **back up** to a folder you choose (e.g. inside OneDrive) now or automatically every week, keeping the newest 5; **restore** a backup (on this PC or a new one: what was there is moved aside into `before-restore-…`, not deleted).
 - **Tools > Calibrate linking**: how well grouping and linking score on a labelled sample of real news and on your verdicts, and **Find best settings** per desk.
 - **Tools > Words behind links**: which words create the most links; add a too-generic one to the stop words in one click. **Tools > Your corrections** lists your verdicts, desk rules and word lists (all removable).
-- **Keyboard**: J/K next/previous story, / filter or search box, S star, U mark unread, F download, B briefing, L watchlist, M map, W world map, A ask, ? all shortcuts (Help menu).
+- **Keyboard**: J/K next/previous story, / filter or search box, S star, U mark unread, F download, B briefing, L watchlist, M map, W world map, A ask, Ctrl+E export, ? all shortcuts (Help menu).
 - **Tools > Settings > Reading**: light or dark colours, text size 90-175% (on top of Windows' display scaling, which the app follows).
 - **Download news now** turns into **Cancel download** while running; articles already downloaded are kept.
 
@@ -49,7 +52,7 @@ Opening the app a second time just brings the open window to the front.
 
 ## Your data (`%USERPROFILE%\LinkedDesk`)
 - `feeds.txt` – feed list (64 to start; edit freely, no limit). `topics.txt` – your topics.
-- `data\articles-YYYY-MM.tsv` – every article ever downloaded (opens in Excel). Nothing is deleted or capped. `data\backup\` – weekly copy of the current month. `data\topic-hits.tsv` – which topic found which article.
+- `data\articles-YYYY-MM.tsv` – every article ever downloaded (opens in Excel); months older than 6 months become `articles-YYYY-MM.tsv.gz` (any zip tool opens them, or Tools > Archive and backup > Save as CSV). `data\index\` – the search index (rebuilt by itself; safe to delete). Nothing is deleted or capped. `data\backup\` – weekly copy of the current month. `data\topic-hits.tsv` – which topic found which article.
 - `feed-health.tsv`, `settings.properties`, `logs\` (`fetch-YYYY-MM.log`, `errors.log`).
 - `claude-usage.tsv` (every Claude request and its cost), `claude-cache.tsv` (answers already paid for), `link-checks.tsv` (Claude's verdicts on links), `digests\YYYY-MM-DD.txt` (each day's digest).
 - `watchlist.txt` (*Name | search words | yes/no*), `watch-seen.tsv` (when you last opened each watch), `sources.txt` (*outlet = mute* or *outlet = 2*), `tickers.txt` (*SYMBOL = company names*), `pending-alerts.txt` (notifications held during quiet hours).
@@ -61,9 +64,11 @@ Opening the app a second time just brings the open window to the front.
 ## Command line
 ```
 LinkedDesk.jar               open the window
-LinkedDesk.jar --fetch       download once, notify, email the briefing, and exit (used by the daily task)
+LinkedDesk.jar --fetch       download once, notify, email the briefing, compress old months, update the index, weekly backup, exit (the daily task)
 LinkedDesk.jar --summary     print stories, links and threads (--all for all history)
 LinkedDesk.jar --print-task  show what the daily task will run
+LinkedDesk.jar --report [YYYY-MM-DD] [file.docx|.html|.md]   weekly report for the week holding that day (default: last week)
+LinkedDesk.jar --backup      back up now to the folder chosen in Tools > Archive and backup
 ```
 
 ## Build and test

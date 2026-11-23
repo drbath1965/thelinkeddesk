@@ -87,7 +87,7 @@ final class Html {
         if (corrections) sb.append(" <span class='act'>· <a href='desk:'>Move to another desk…</a></span>");
         if (x != null) {
             sb.append(" <span class='act'>· ").append(x.starred() ? "<span class='star'>★ Starred</span> <a href='unstar:'>unstar</a>" : "<a href='star:'>☆ Star</a>")
-              .append(" · <a href='unread:'>Mark unread</a> · <a href='watch:'>Watch this subject…</a></span>");
+              .append(" · <a href='unread:'>Mark unread</a> · <a href='watch:'>Watch this subject…</a> · <a href='copy:'>Copy</a> · <a href='export:'>Export…</a></span>");
             if (x.newSinceRead()) sb.append(" <span class='new'>new coverage since you read it</span>");
         }
         sb.append("<h1>").append(hl.apply(c.headline)).append("</h1>");

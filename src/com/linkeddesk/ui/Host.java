@@ -41,6 +41,10 @@ interface Host {
     /** Opens the "watch a subject" editor with these words. */
     default void addWatch(String words) { }
 
+    /** Copies a story with its sources to the clipboard; saves it as a file (EXP-F01). */
+    default void copyStory(StoryCluster c) { }
+    default void exportStory(StoryCluster c) { }
+
     /** A story was starred or unstarred: refresh the Saved tab. */
     default void savedChanged() { }
 }

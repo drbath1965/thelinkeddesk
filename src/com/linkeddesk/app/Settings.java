@@ -192,6 +192,26 @@ public final class Settings {
         p.setProperty("emailTo", to.trim());
     }
 
+    // ---- archive: compression and backups (STO-F04)
+    /** Compress months older than this many months (0 = never). */
+    public synchronized int compressAfterMonths() {
+        try { return Math.max(0, Integer.parseInt(p.getProperty("compressAfterMonths", "6").trim())); } catch (NumberFormatException e) { return 6; }
+    }
+    public synchronized void setCompressAfterMonths(int m) { p.setProperty("compressAfterMonths", Integer.toString(Math.max(0, m))); }
+    public synchronized String backupFolder() { return p.getProperty("backupFolder", "").trim(); }
+    public synchronized void setBackupFolder(String f) { p.setProperty("backupFolder", f == null ? "" : f.trim()); }
+    /** Back up automatically once a week (after the daily download). */
+    public synchronized boolean backupWeekly() { return Boolean.parseBoolean(p.getProperty("backupWeekly", "false")); }
+    public synchronized void setBackupWeekly(boolean b) { p.setProperty("backupWeekly", Boolean.toString(b)); }
+    public synchronized int backupKeep() {
+        try { return Math.max(1, Integer.parseInt(p.getProperty("backupKeep", "5").trim())); } catch (NumberFormatException e) { return 5; }
+    }
+    public synchronized void setBackupKeep(int n) { p.setProperty("backupKeep", Integer.toString(Math.max(1, n))); }
+    public synchronized long backupLast() {
+        try { return Long.parseLong(p.getProperty("backupLast", "0").trim()); } catch (NumberFormatException e) { return 0; }
+    }
+    public synchronized void setBackupLast(long t) { p.setProperty("backupLast", Long.toString(t)); }
+
     /** Show the briefing when the app opens and after each daily download. */
     public synchronized boolean showBriefing() { return Boolean.parseBoolean(p.getProperty("showBriefing", "true")); }
     public synchronized void setShowBriefing(boolean b) { p.setProperty("showBriefing", Boolean.toString(b)); }

@@ -22,6 +22,7 @@ final class WatchPanel extends JPanel {
     private final DefaultListModel<Watches.Watch> model = new DefaultListModel<>();
     private final JList<Watches.Watch> list = new JList<>(model);
     private final StoryBrowser browser;
+    StoryBrowser browser() { return browser; }
     private final JLabel info = new JLabel(" ");
     private final Map<String, int[]> counts = new HashMap<>();   // name -> {new, stories}
     private final JButton edit = new JButton("Edit…"), delete = new JButton("Delete");
