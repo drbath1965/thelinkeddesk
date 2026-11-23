@@ -74,6 +74,9 @@ final class WeeklyReportDialog extends JDialog {
         for (LocalDate mon = WeeklyReport.weekStart(LocalDate.now()); !mon.plusDays(6).isBefore(first); mon = mon.minusWeeks(1)) weeks.addElement(mon);
     }
 
+    /** Re-renders the preview (after the news zoom changed). */
+    void refreshPage() { if (list.getSelectedValue() != null) make(list.getSelectedValue()); }
+
     private void make(LocalDate mon) {
         int my = ++run;
         for (JButton b : List.of(word, other, copy)) b.setEnabled(false);

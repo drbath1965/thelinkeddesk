@@ -117,6 +117,7 @@ final class StoryBrowser extends JSplitPane {
 
         @Override public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean sel, boolean focus) {
             super.getListCellRendererComponent(list, value, index, sel, focus);
+            setFont(Theme.readFont(list.getFont()));
             StoryCluster c = (StoryCluster) value;
             int w = Math.max(200, list.getParent() != null ? list.getParent().getWidth() - 40 : list.getWidth() - 40);
             long cross = c.links.stream().filter(StoryLink::crossDesk).count();

@@ -247,6 +247,13 @@ public final class Settings {
         try { return Math.max(70, Math.min(300, Integer.parseInt(p.getProperty("textSize", "100").trim()))); }
         catch (NumberFormatException e) { return 100; }
     }
+    /** Zoom of the news pages and story lists only (Ctrl + mouse wheel), in percent; menus and dialogs keep the text size. */
+    public synchronized int readingZoom() {
+        try { return Math.max(50, Math.min(300, Integer.parseInt(p.getProperty("readingZoom", "100").trim()))); }
+        catch (NumberFormatException e) { return 100; }
+    }
+    public synchronized void setReadingZoom(int pct) { p.setProperty("readingZoom", Integer.toString(Math.max(50, Math.min(300, pct)))); }
+
     public synchronized void setTextSize(int pct) { p.setProperty("textSize", Integer.toString(Math.max(70, Math.min(300, pct)))); }
 
     public synchronized int windowDays() {

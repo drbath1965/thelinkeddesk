@@ -127,7 +127,8 @@ final class SettingsDialog extends JDialog {
         g.gridwidth = 2;
         form.add(briefing, g); g.gridy++;
         form.add(note("Text size adds to Windows' own display scaling (Settings > Display > Scale), which the app follows. "
-                + "Quicker: hold Ctrl and turn the mouse wheel anywhere in the app, or press Ctrl + / Ctrl - (Ctrl 0 goes back to 100%)."), g); g.gridy++;
+                + "To make just the news bigger (stories, the briefing, threads) without changing menus, hold Ctrl and turn the mouse wheel, "
+                + "or press Ctrl + / Ctrl - (Ctrl 0 goes back to 100%)."), g); g.gridy++;
 
         form.add(section("Notifications"), g); g.gridy++;
         form.add(notifications, g); g.gridy++;

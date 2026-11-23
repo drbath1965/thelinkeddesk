@@ -828,26 +828,43 @@ public final class MainWindow extends JFrame implements Host {
     }
 
     private void zoomBy(int dir) {
-        int now = zoomTarget > 0 ? zoomTarget : service.settings().textSize();
-        zoomTo(Theme.step(now, dir));
+        int now = zoomTarget > 0 ? zoomTarget : Math.round(Theme.read * 100);
+        zoomTo(Theme.zoomStep(now, dir));
     }
 
     private void zoomTo(int pct) {
         zoomTarget = pct;
-        status.setText("Text size " + pct + "%  (Ctrl + mouse wheel to change, Ctrl 0 for 100%)");
-        zoomTimer.restart();      // apply once the wheel stops, so the window isn't redrawn at every notch
+        status.setText("News zoom " + pct + "%  (Ctrl + mouse wheel to change, Ctrl 0 for 100%)");
+        zoomTimer.restart();      // apply once the wheel stops, so the pages aren't redrawn at every notch
     }
 
+    /** Zooms the news only (pages, story lists); menus, tabs and dialogs stay as they are. */
     private void applyZoom() {
         int pct = zoomTarget;
         zoomTarget = -1;
-        if (pct <= 0) return;
+        if (pct <= 0 || pct == Math.round(Theme.read * 100)) return;
+        Theme.read = pct / 100f;
         service.settings().reload();
-        if (pct == service.settings().textSize()) return;
-        service.settings().setTextSize(pct);
+        service.settings().setReadingZoom(pct);
         service.settings().save();
-        applyLook();
-        status.setText("Text size " + pct + "%");
+        refreshReading();
+        status.setText("News zoom " + pct + "%");
+    }
+
+    /** Redraws the news pages and lists (after the zoom changed). */
+    private void refreshReading() {
+        for (StoryBrowser b : List.of(stories, saved, search.browser(), watchPanel.browser(), markets.browser())) { b.refreshDetail(); b.refreshRows(); }
+        briefing.refreshPage();
+        map.refreshPage();
+        world.refreshPage();
+        askPanel.refreshPage();
+        topics.refresh();
+        for (JList<?> l : List.of(threadList, lineList)) { l.setFixedCellHeight(10); l.setFixedCellHeight(-1); l.revalidate(); l.repaint(); }
+        StoryThread th = threadList.getSelectedValue();
+        if (th != null) { threadPane.setText(Html.thread(th)); threadPane.setCaretPosition(0); }
+        Storyline ln = lineList.getSelectedValue();
+        if (ln != null) { linePane.setText(Html.storyline(ln)); linePane.setCaretPosition(0); }
+        if (reportDialog != null && reportDialog.isShowing()) reportDialog.refreshPage();
     }
 
     /** Redraws everything after the colours or text size changed. */
@@ -898,7 +915,7 @@ public final class MainWindow extends JFrame implements Host {
             {"W", "Open the world map"},
             {"A", "Ask Claude about your news"},
             {"L", "Open your watchlist"},
-            {"Ctrl + mouse wheel", "Bigger or smaller text (also Ctrl + / Ctrl -; Ctrl 0 = 100%)"},
+            {"Ctrl + mouse wheel", "Zoom the news in or out (also Ctrl + / Ctrl -; Ctrl 0 = 100%)"},
             {"?", "Show these shortcuts"},
             {"Ctrl+D / Ctrl+F / Ctrl+L / Ctrl+E", "Download / Search all news / Logs / Export what's on screen"},
     };
@@ -993,6 +1010,7 @@ public final class MainWindow extends JFrame implements Host {
     private static final class LineRenderer extends DefaultListCellRenderer {
         @Override public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean sel, boolean focus) {
             super.getListCellRendererComponent(list, value, index, sel, focus);
+            setFont(Theme.readFont(list.getFont()));
             Storyline l = (Storyline) value;
             int w = Math.max(200, list.getParent() != null ? list.getParent().getWidth() - 40 : list.getWidth() - 40);
             setText("<html><div style='width:" + Html.cssPx(w) + "px'><b>" + Html.esc(l.latest().headline) + "</b><br>"
@@ -1009,6 +1027,7 @@ public final class MainWindow extends JFrame implements Host {
     private static final class ThreadRenderer extends DefaultListCellRenderer {
         @Override public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean sel, boolean focus) {
             super.getListCellRendererComponent(list, value, index, sel, focus);
+            setFont(Theme.readFont(list.getFont()));
             StoryThread t = (StoryThread) value;
             StringBuilder desks = new StringBuilder();
             for (Category c : t.desks()) {

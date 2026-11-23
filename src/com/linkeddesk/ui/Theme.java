@@ -21,6 +21,8 @@ public final class Theme {
 
     static boolean dark;
     static float scale = 1f;
+    /** Extra zoom for the news itself (pages and story lists), set with Ctrl + mouse wheel. */
+    static float read = 1f;
     private static final Map<Object, Font> baseFonts = new HashMap<>();
     private static String baseLaf;
 
@@ -28,6 +30,7 @@ public final class Theme {
     public static void apply(Settings s) {
         dark = "dark".equalsIgnoreCase(s.theme());
         scale = s.textSize() / 100f;
+        read = s.readingZoom() / 100f;
         try {
             if (dark) {
                 MetalLookAndFeel.setCurrentTheme(new Dark());
@@ -110,7 +113,19 @@ public final class Theme {
     static Color c(String hex) { return new Color(Integer.parseInt(hex.substring(1), 16)); }
 
     /** Text size for HTML pages, in points, scaled by the text-size setting. */
-    static String pt(double base) { return String.format(java.util.Locale.ROOT, "%.1fpt", base * scale); }
+    static String pt(double base) { return String.format(java.util.Locale.ROOT, "%.1fpt", base * scale * read); }
+
+    /** A list's font with the reading zoom applied (story, thread and storyline lists). */
+    static Font readFont(Font f) { return read == 1f ? f : f.deriveFont(f.getSize2D() * read); }
+
+    /** The zoom steps for the news (Ctrl + mouse wheel), in percent. */
+    static final int[] ZOOMS = {50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 165, 180, 200, 225, 250, 275, 300};
+
+    static int zoomStep(int now, int dir) {
+        if (dir > 0) { for (int z : ZOOMS) if (z > now) return z; return ZOOMS[ZOOMS.length - 1]; }
+        for (int i = ZOOMS.length - 1; i >= 0; i--) if (ZOOMS[i] < now) return ZOOMS[i];
+        return ZOOMS[0];
+    }
 
     /** The dark colours for Swing's cross-platform look. */
     private static final class Dark extends DefaultMetalTheme {
