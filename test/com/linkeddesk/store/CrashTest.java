@@ -24,7 +24,7 @@ public final class CrashTest {
         });
         slow.start();
         try {
-            Files.writeString(home.resolve(".feeds-v1.1"), "test: no v1.1 feed upgrade");   // keep the test offline
+            Files.writeString(home.resolve(".feeds-v1.1"), "test: no v1.1 feed upgrade"); Files.writeString(home.resolve(".feeds-v1.8"), "test: no v1.1 feed upgrade");   // keep the test offline
             // Day 1: a normal download.
             Files.writeString(home.resolve("feeds.txt"), "World | BBC World | " + res.resolve("bbc_world.xml").toUri() + "\n");
             Process day1 = launch(home);

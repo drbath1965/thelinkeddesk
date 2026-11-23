@@ -155,7 +155,8 @@ public final class Analyzer {
         if (Boolean.getBoolean("linkeddesk.profile"))
             System.out.printf("  [profile] vectors %.2fs, grouping %.2fs, storylines %.2fs, linking %.2fs, threads %.2fs%n",
                     (p1 - p0) / 1e9, (p2 - p1) / 1e9, (p3 - p2) / 1e9, (p4 - p3) / 1e9, (p5 - p4) / 1e9);
-        stories.sort(Comparator.comparingInt(StoryCluster::sourceCount).reversed()
+        for (StoryCluster c : stories) { c.copies = Coverage.copies(c.articles); c.recount(); }   // ANL-F12: wire copies count once
+        stories.sort(Comparator.comparingInt(StoryCluster::independentCount).reversed()
                 .thenComparing(Comparator.comparingLong((StoryCluster c) -> c.lastSeen).reversed()));
         return new Result(stories, threads, articles.size(), storylines, List.copyOf(termUse));
     }

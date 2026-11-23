@@ -123,7 +123,9 @@ final class StoryBrowser extends JSplitPane {
             long cross = c.links.stream().filter(StoryLink::crossDesk).count();
             String links = c.links.isEmpty() ? "" : " · ↔ " + c.links.size() + (c.links.size() == 1 ? " link" : " links")
                     + (cross > 0 ? " (" + cross + " other desk)" : "");
+            int ind = c.independentCount();
             String meta0 = c.category.label() + (c.also != null ? " + " + c.also.label() : "") + " · " + c.sourceCount() + (c.sourceCount() == 1 ? " source" : " sources")
+                    + (ind < c.sourceCount() ? " (" + ind + " independent)" : "")
                     + " · " + Html.ago(c.lastSeen) + links;
             var reads = host.service().reads();
             var sp = host.service().regions().spread(c);

@@ -21,9 +21,11 @@ public final class FeedCatalog {
         Path f = AppPaths.feedsFile();
         try {
             Path upgraded = AppPaths.home().resolve(".feeds-v1.1");
+            Path upgraded18 = AppPaths.home().resolve(".feeds-v1.8");
             if (!Files.exists(f)) {
                 Files.writeString(f, DEFAULT_FEEDS, StandardCharsets.UTF_8);
                 Files.writeString(upgraded, "new install");
+                Files.writeString(upgraded18, "new install");
             }
             String text = Files.readString(f, StandardCharsets.UTF_8);
             if (!Files.exists(upgraded)) {
@@ -38,6 +40,20 @@ public final class FeedCatalog {
                     Files.writeString(f, text, StandardCharsets.UTF_8);
                 }
                 Files.writeString(upgraded, "added v1.1 feeds");
+            }
+            if (!Files.exists(upgraded18)) {
+                // v1.8: the Defense & Space desk. Move the defense and space feeds to it, add four more. Once only.
+                if (!text.contains(V18_MARKER)) {
+                    StringBuilder fixed = new StringBuilder();
+                    for (String line : text.split("\\R", -1)) {
+                        String[] p = line.split("\\|");
+                        if (!line.strip().startsWith("#") && p.length >= 3 && TO_DEFENSE.contains(p[1].strip())) line = "Defense |" + line.substring(line.indexOf('|') + 1);
+                        fixed.append(line).append('\n');
+                    }
+                    text = fixed.toString().stripTrailing() + "\n" + V18_ADDITIONS;
+                    Files.writeString(f, text, StandardCharsets.UTF_8);
+                }
+                Files.writeString(upgraded18, "added v1.8 feeds");
             }
             return parse(text);
         } catch (IOException e) {
@@ -98,15 +114,28 @@ public final class FeedCatalog {
             World | The Moscow Times | https://www.themoscowtimes.com/rss/news
             World | MercoPress (South America) | https://en.mercopress.com/rss
             Politics | Politico Europe | https://www.politico.eu/feed/
-            World | Defense News | https://www.defensenews.com/arc/outboundfeeds/rss/
-            World | Breaking Defense | https://breakingdefense.com/feed/
-            Tech | SpaceNews | https://spacenews.com/feed/
+            Defense | Defense News | https://www.defensenews.com/arc/outboundfeeds/rss/
+            Defense | Breaking Defense | https://breakingdefense.com/feed/
+            Defense | SpaceNews | https://spacenews.com/feed/
             """;
+
+    static final String V18_MARKER = "# ---------- Added in v1.8: Defense & Space desk ----------";
+
+    /** New in v1.8 (ANL-F14). Appended once to an existing feeds.txt. */
+    static final String V18_ADDITIONS = "\n" + V18_MARKER + "\n" + """
+            Defense | Army Times | https://www.armytimes.com/feed/
+            Defense | NASA News Releases | https://www.nasa.gov/news-release/feed/
+            Defense | NASA Marshall | https://www.nasa.gov/centers-and-facilities/marshall/feed/
+            Defense | WHNT News 19 (Huntsville) | https://whnt.com/feed/
+            """;
+
+    /** In v1.8 these move from World/Tech to the new Defense & Space desk. */
+    static final java.util.List<String> TO_DEFENSE = java.util.List.of("Defense News", "Breaking Defense", "SpaceNews");
 
     public static final String DEFAULT_FEEDS = """
             # The Linked Desk feed list
             # Format:  Category | Source name | Feed URL
-            # Categories: World, Finance, Politics, Society, Tech
+            # Categories: World, Finance, Politics, Society, Tech, Defense
             # Add or remove as many lines as you like. Every article in every feed is downloaded.
             # A source name starting with "Google News" takes the outlet name from each headline.
 
@@ -167,7 +196,7 @@ public final class FeedCatalog {
             Tech | The Guardian Technology | https://www.theguardian.com/technology/rss
             Tech | Google News Technology | https://news.google.com/rss/headlines/section/topic/TECHNOLOGY?hl=en-US&gl=US&ceid=US:en
             Tech | Google News Science | https://news.google.com/rss/headlines/section/topic/SCIENCE?hl=en-US&gl=US&ceid=US:en
-            """ + V11_ADDITIONS;
+            """ + V11_ADDITIONS + V18_ADDITIONS;
 
 
 

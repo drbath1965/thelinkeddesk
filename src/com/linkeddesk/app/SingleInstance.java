@@ -54,6 +54,19 @@ public final class SingleInstance {
         return true;
     }
 
+    /** After an update starts this copy: waits (up to {@code ms}) for the old window to let go of the lock. */
+    public static void waitForOldWindow(Path home, long ms) {
+        long end = System.currentTimeMillis() + ms;
+        Path f = home.resolve(".window.lock");
+        while (System.currentTimeMillis() < end) {
+            try (FileChannel ch = FileChannel.open(f, StandardOpenOption.CREATE, StandardOpenOption.WRITE)) {
+                FileLock l = ch.tryLock();
+                if (l != null) { l.release(); return; }
+            } catch (IOException | java.nio.channels.OverlappingFileLockException ignored) { }
+            try { Thread.sleep(250); } catch (InterruptedException e) { return; }
+        }
+    }
+
     private static void signal(Path portFile) {
         try {
             int port = Integer.parseInt(Files.readString(portFile).trim());

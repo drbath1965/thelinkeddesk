@@ -17,7 +17,7 @@ import java.util.regex.Pattern;
  *   hegseth -caracas      leave out articles with "caracas"
  * and field filters (any number, combined with the words; "-" in front leaves them out):
  *   source:bbc  source:"al jazeera"   outlet name contains
- *   desk:finance                      desk (world, finance, politics, society, tech)
+ *   desk:finance                      desk (world, finance, politics, society, tech, defense)
  *   after:2026-11-01  before:2026-11-20  after:3d   published after/before a day, or within the last N days
  *   region:europe                     where the outlet is based (regions.txt)
  *   is:unread  is:starred             what you haven't read / what you starred
@@ -89,13 +89,14 @@ public final class SearchQuery {
         } else if (name.equals("desk")) {
             String v = value.toLowerCase(Locale.ROOT);
             if (!(v.startsWith("wor") || v.startsWith("fin") || v.startsWith("bus") || v.startsWith("eco") || v.startsWith("mark") || v.startsWith("pol")
-                    || v.startsWith("soc") || v.startsWith("cli") || v.startsWith("hea") || v.startsWith("tech") || v.startsWith("sci"))) {
-                problems.add("desk: use world, finance, politics, society or tech");
+                    || v.startsWith("soc") || v.startsWith("cli") || v.startsWith("hea") || v.startsWith("tech") || v.startsWith("sci")
+                    || v.startsWith("def") || v.startsWith("spa") || v.startsWith("mil") || v.startsWith("aero"))) {
+                problems.add("desk: use world, finance, politics, society, tech or defense");
                 return;
             }
         } else if (name.equals("is")) {
             String v = value.toLowerCase(Locale.ROOT);
-            if (!v.equals("unread") && !v.equals("read") && !v.equals("starred")) { problems.add("is: use unread, read or starred"); return; }
+            if (!v.equals("unread") && !v.equals("read") && !v.equals("starred") && !v.equals("opinion")) { problems.add("is: use unread, read, starred or opinion"); return; }
         }
         fields.add(new Field(name, value, neg, time));
     }
@@ -128,6 +129,7 @@ public final class SearchQuery {
                 case "is" -> switch (f.value().toLowerCase(Locale.ROOT)) {
                     case "unread" -> read == null || !read.test(a);
                     case "read" -> read != null && read.test(a);
+                    case "opinion" -> Coverage.opinion(a);
                     default -> starred != null && starred.test(a);
                 };
                 default -> true;

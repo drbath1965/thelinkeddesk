@@ -157,7 +157,7 @@ public final class AlertsTest {
         String oldHome = System.getProperty("linkeddesk.home");
         Path appHome = Files.createTempDirectory("ld-alerts-app");
         System.setProperty("linkeddesk.home", appHome.toString());
-        Files.writeString(appHome.resolve(".feeds-v1.1"), "test");
+        Files.writeString(appHome.resolve(".feeds-v1.1"), "test"); Files.writeString(appHome.resolve(".feeds-v1.8"), "test");
         SmtpStandIn smtp = null;
         try {
             Settings st = Settings.load();

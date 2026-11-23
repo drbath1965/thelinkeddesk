@@ -64,7 +64,7 @@ public final class ClaudeFeaturesTest {
         Path home = Files.createTempDirectory("ld-claude");
         System.setProperty("linkeddesk.home", home.toString());
         System.setProperty("linkeddesk.apiBase", "http://127.0.0.1:" + server.getAddress().getPort());
-        Files.writeString(home.resolve(".feeds-v1.1"), "test");
+        Files.writeString(home.resolve(".feeds-v1.1"), "test"); Files.writeString(home.resolve(".feeds-v1.8"), "test");
         try {
             Settings st = Settings.load();
             st.setApiKey("good");

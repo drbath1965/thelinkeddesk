@@ -11,7 +11,8 @@ mkdir out-test
 dir /s /b src\*.java > out\sources.txt
 javac --release 21 -encoding UTF-8 -d out @out\sources.txt || exit /b 1
 xcopy /s /q /y src\*.tsv out\ >nul || exit /b 1
-echo Main-Class: com.linkeddesk.app.App> out\MANIFEST.MF
+> out\MANIFEST.MF echo Main-Class: com.linkeddesk.app.App
+>> out\MANIFEST.MF echo Implementation-Version: %VER%
 if exist LinkedDesk.jar del LinkedDesk.jar
 jar --create --file %JAR% --manifest out\MANIFEST.MF -C out com || exit /b 1
 echo Built %JAR%

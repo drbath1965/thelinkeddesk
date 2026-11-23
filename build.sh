@@ -8,7 +8,7 @@ JAR="LinkedDesk-$VER.jar"
 rm -rf out out-test && mkdir -p out out-test
 javac --release 21 -encoding UTF-8 -d out $(find src -name '*.java')
 (cd src && find . -type f ! -name '*.java' -exec cp --parents {} ../out/ \;)
-printf 'Main-Class: com.linkeddesk.app.App\n' > out/MANIFEST.MF
+printf 'Main-Class: com.linkeddesk.app.App\nImplementation-Version: %s\n' "$VER" > out/MANIFEST.MF
 rm -f LinkedDesk.jar
 jar --create --file "$JAR" --manifest out/MANIFEST.MF -C out com
 echo "Built $JAR"

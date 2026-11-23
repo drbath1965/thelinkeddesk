@@ -83,6 +83,9 @@ public final class MainWindow extends JFrame implements Host {
     private final JProgressBar busy = new JProgressBar();
     private FeedHealthDialog healthDialog;
     private final WatchPanel watchPanel;
+    private final SincePanel sincePanel;
+    /** "Since you last looked" counts from here: when the app was last open (UI-F14). */
+    private long sinceBaseline;
     private final MarketsPanel markets;
     private com.linkeddesk.alerts.Tray tray;
     /** Which watches each story in the current view matches (worked out after each analysis). */
@@ -108,6 +111,10 @@ public final class MainWindow extends JFrame implements Host {
         world = new WorldPanel(this);
         askPanel = new AskPanel(this);
         watchPanel = new WatchPanel(this);
+        sincePanel = new SincePanel(this);
+        long lastActive = service.settings().lastActive();
+        sinceBaseline = lastActive > 0 ? lastActive : System.currentTimeMillis() - 24 * 3_600_000L;
+        sincePanel.seen.addActionListener(e -> { sinceBaseline = System.currentTimeMillis(); markActive(); updateSince(); });
         markets = new MarketsPanel(this);
         threadTimeline.onOpen = c -> openStory(c.id);
         lineTimeline.onOpen = c -> openStory(c.id);
@@ -175,6 +182,7 @@ public final class MainWindow extends JFrame implements Host {
         linePane.setText(Html.empty("Storylines appear when an event is reported again on later days."));
 
         tabs.addTab("Briefing", briefing);
+        tabs.addTab("Since last visit", sincePanel);
         tabs.addTab("Stories", stories);
         tabs.addTab("Saved", saved);
         tabs.addTab("Watchlist", watchPanel);
@@ -212,6 +220,12 @@ public final class MainWindow extends JFrame implements Host {
         unreadOnly.addActionListener(e -> refreshLists(null));
         installShortcuts();
         installZoom();
+        tabs.addChangeListener(e -> {
+            if (tabs.getSelectedComponent() == topics && System.currentTimeMillis() - suggestionsAt > 10 * 60_000L) { suggestionsAt = System.currentTimeMillis(); topics.refreshSuggestions(); }
+        });
+        // Remember when the app was last open, for "Since you last looked" next time.
+        new Timer(5 * 60_000, e -> markActive()).start();
+        addWindowListener(new WindowAdapter() { @Override public void windowClosing(WindowEvent e) { markActive(); } });
         filter.getDocument().addDocumentListener(new DocumentListener() {
             public void insertUpdate(DocumentEvent e) { refreshLists(null); }
             public void removeUpdate(DocumentEvent e) { refreshLists(null); }
@@ -248,6 +262,17 @@ public final class MainWindow extends JFrame implements Host {
         view.add(item("World map", 0, e -> tabs.setSelectedComponent(world)));
         view.add(item("Ask about the news", 0, e -> { tabs.setSelectedComponent(askPanel); askPanel.focusQuestion(); }));
         view.addSeparator();
+        JCheckBoxMenuItem hideOp = new JCheckBoxMenuItem("Hide opinion and analysis pieces", service.settings().hideOpinion());
+        hideOp.addActionListener(e -> {
+            service.settings().reload();
+            service.settings().setHideOpinion(hideOp.isSelected());
+            service.settings().save();
+            analyze(null);
+            briefing.reload();
+            status.setText(hideOp.isSelected() ? "Opinion and analysis pieces are hidden (View menu to show them again)." : "Opinion and analysis pieces are shown again.");
+        });
+        view.add(hideOp);
+        view.addSeparator();
         view.add(item("Logs…", KeyEvent.VK_L, e -> new LogsDialog(this).setVisible(true)));
         view.add(item("Last download report", 0, e -> showReport()));
         JMenu tools = new JMenu("Tools");
@@ -263,6 +288,15 @@ public final class MainWindow extends JFrame implements Host {
         tools.add(item("Claude usage…", 0, e -> new UsageDialog(this, service).setVisible(true)));
         JMenu help = new JMenu("Help");
         help.add(item("Keyboard shortcuts", 0, e -> showShortcuts()));
+        help.addSeparator();
+        help.add(item("Check this PC…", 0, e -> new SelfCheckDialog(this, service, () -> service.emailBriefing(true), this::testNotification).setVisible(true)));
+        help.add(item("Check for updates…", 0, e -> UpdateDialog.check(this, service.settings(), true, this::beforeUpdateExit)));
+        JCheckBoxMenuItem autoUpd = new JCheckBoxMenuItem("Check for updates automatically", service.settings().checkUpdates());
+        autoUpd.addActionListener(e -> { service.settings().reload(); service.settings().setCheckUpdates(autoUpd.isSelected()); service.settings().save(); });
+        help.add(autoUpd);
+        help.add(item("About The Linked Desk", 0, e -> JOptionPane.showMessageDialog(this, "The Linked Desk " + com.linkeddesk.app.AppPaths.VERSION
+                + "\nWorld news, linked.\n\nData folder: " + com.linkeddesk.app.AppPaths.home() + "\nReleases: " + com.linkeddesk.service.UpdateCheck.PAGE,
+                "About", JOptionPane.INFORMATION_MESSAGE)));
         mb.add(news); mb.add(tmenu); mb.add(find); mb.add(view); mb.add(tools); mb.add(help);
         return mb;
     }
@@ -295,6 +329,8 @@ public final class MainWindow extends JFrame implements Host {
                     String moved = com.linkeddesk.schedule.WindowsTask.followThisCopy();
                     if (moved != null) { com.linkeddesk.app.Logs.run("task", moved, "", 0); SwingUtilities.invokeLater(() -> status.setText(moved)); }
                 }, "task-check").start();
+                // Once a day: is there a newer release on GitHub? (quiet unless there is)
+                new Timer(20_000, ev -> { ((Timer) ev.getSource()).stop(); UpdateDialog.check(MainWindow.this, service.settings(), false, MainWindow.this::beforeUpdateExit); }).start();
                 analyze(() -> {
                     if (service.settings().fetchOnStart() && DailyScheduler.isStale(service.settings())) fetchDaily();
                 });
@@ -617,6 +653,41 @@ public final class MainWindow extends JFrame implements Host {
                 + ". Paste into Word, Outlook or Gmail and the links come along.");
     }
 
+    @Override public void framing(StoryCluster c) {
+        service.settings().reload();
+        if (!service.settings().hasApiKey()) {
+            JOptionPane.showMessageDialog(this, "To compare how outlets framed a story, add an Anthropic API key in Tools > Settings.", "How outlets framed it", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        setBusy("Asking Claude how the outlets framed it…");
+        new SwingWorker<com.linkeddesk.ai.Framing.Result, Void>() {
+            @Override protected com.linkeddesk.ai.Framing.Result doInBackground() throws Exception { return service.framing(c); }
+            @Override protected void done() {
+                busy.setVisible(false);
+                updateStatus();
+                try {
+                    var r = get();
+                    JEditorPane p = StoryBrowser.htmlPane();
+                    p.setText(Html.framing(r, service.claude().summary()));
+                    p.setCaretPosition(0);
+                    p.addHyperlinkListener(ev -> {
+                        if (ev.getEventType() == HyperlinkEvent.EventType.ACTIVATED)
+                            try { Desktop.getDesktop().browse(java.net.URI.create(ev.getDescription())); } catch (Exception ignored) { }
+                    });
+                    JScrollPane sp = new JScrollPane(p);
+                    sp.setPreferredSize(new Dimension(Math.min(900, getWidth() - 80), Math.min(700, getHeight() - 80)));
+                    JDialog d = new JDialog(MainWindow.this, "How outlets framed it", Dialog.ModalityType.MODELESS);
+                    d.getContentPane().add(sp);
+                    d.pack();
+                    d.setLocationRelativeTo(MainWindow.this);
+                    d.setVisible(true);
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(MainWindow.this, firstMessage(ex), "How outlets framed it", JOptionPane.WARNING_MESSAGE);
+                }
+            }
+        }.execute();
+    }
+
     @Override public void exportStory(StoryCluster c) {
         ExportUi.save(this, this, com.linkeddesk.export.Exporter.story(c, service.regions()), List.of(c));
     }
@@ -649,7 +720,7 @@ public final class MainWindow extends JFrame implements Host {
             return;
         }
         StoryBrowser b = t == saved ? saved : t == stories ? stories : t == search ? search.browser() : t == watchPanel ? watchPanel.browser()
-                : t == markets ? markets.browser() : null;
+                : t == markets ? markets.browser() : t == sincePanel ? sincePanel.browser() : null;
         List<StoryCluster> list = b == null ? List.of() : b.shown();
         StoryCluster open = b == null ? stories.selected() : b.selected();
         if (open == null && list.isEmpty()) { status.setText("Open a story, a thread or the briefing to export it."); return; }
@@ -663,7 +734,7 @@ public final class MainWindow extends JFrame implements Host {
         }
         if (choice == 0) exportStory(open);
         else {
-            String title = t == saved ? "Saved stories" : t == search ? "Search results" : t == watchPanel ? "Watchlist" : t == markets ? "Markets"
+            String title = t == saved ? "Saved stories" : t == sincePanel ? "Since you last looked" : t == search ? "Search results" : t == watchPanel ? "Watchlist" : t == markets ? "Markets"
                     : "Stories · " + window.getSelectedItem() + (desk.getSelectedItem() instanceof Category cat ? " · " + cat.label() : "");
             ExportUi.save(this, this, com.linkeddesk.export.Exporter.stories(title, list, reg), list);
         }
@@ -697,6 +768,22 @@ public final class MainWindow extends JFrame implements Host {
         t.setDaemon(true);
         t.setPriority(Thread.MIN_PRIORITY);
         t.start();
+    }
+
+    private long suggestionsAt;
+
+    private void markActive() {
+        service.settings().reload();
+        service.settings().setLastActive(System.currentTimeMillis());
+        service.settings().save();
+    }
+
+    /** Recounts "Since you last looked" from the current stories (after each analysis and when watch marks arrive). */
+    private void updateSince() {
+        var r = com.linkeddesk.analysis.SinceLastVisit.compute(result.stories(), sinceBaseline, this::watchesFor);
+        sincePanel.show(r, result.stories());
+        int i = tabs.indexOfComponent(sincePanel);
+        if (i >= 0) tabs.setTitleAt(i, r.isEmpty() ? "Since last visit" : "Since last visit (" + r.items().size() + ")");
     }
 
     private void openSources() {
@@ -736,6 +823,7 @@ public final class MainWindow extends JFrame implements Host {
                 stories.refreshRows();
                 saved.refreshRows();
                 updateWatchTab();
+                updateSince();
             }
         }.execute();
     }
@@ -858,7 +946,7 @@ public final class MainWindow extends JFrame implements Host {
 
     /** Redraws the news pages and lists (after the zoom changed). */
     private void refreshReading() {
-        for (StoryBrowser b : List.of(stories, saved, search.browser(), watchPanel.browser(), markets.browser())) { b.refreshDetail(); b.refreshRows(); }
+        for (StoryBrowser b : List.of(stories, saved, search.browser(), watchPanel.browser(), markets.browser(), sincePanel.browser())) { b.refreshDetail(); b.refreshRows(); }
         briefing.refreshPage();
         map.refreshPage();
         world.refreshPage();
@@ -974,6 +1062,19 @@ public final class MainWindow extends JFrame implements Host {
             savedChanged();
             refreshLists(null);
         } catch (Exception ex) { status.setText("Could not save: " + rootMessage(ex)); }
+    }
+
+    /** A test pop-up for Check this PC. */
+    private void testNotification() {
+        if (tray == null) installTray();
+        if (tray == null || !tray.show("The Linked Desk", "Test notification: alerts will appear like this."))
+            JOptionPane.showMessageDialog(this, "The system tray isn't available, so notifications can't be shown on this desktop.");
+    }
+
+    /** Before an update starts the new copy: remember the visit and remove the tray icon. */
+    private void beforeUpdateExit() {
+        markActive();
+        if (tray != null) tray.remove();
     }
 
     private void showShortcuts() {

@@ -18,6 +18,12 @@ final class TopicsPanel extends JPanel {
     private final JList<Topic> list = new JList<>(model);
     private final StoryBrowser browser;
     private final JButton edit = new JButton("Edit…"), pause = new JButton("Pause"), delete = new JButton("Delete…"), now = new JButton("Download now");
+    // Suggested topics (FET-F09)
+    private final DefaultListModel<com.linkeddesk.analysis.TopicSuggester.Suggestion> suggestions = new DefaultListModel<>();
+    private final JList<com.linkeddesk.analysis.TopicSuggester.Suggestion> suggestionList = new JList<>(suggestions);
+    private final JButton sugAdd = new JButton("Add as topic…"), sugWatch = new JButton("Watch instead"), sugHide = new JButton("Not interested");
+    private final JLabel sugInfo = new JLabel(" ");
+    private int sugRun;
 
     TopicsPanel(Host host) {
         super(new BorderLayout());
@@ -42,14 +48,107 @@ final class TopicsPanel extends JPanel {
         intro.setBorder(BorderFactory.createEmptyBorder(8, 8, 4, 8));
         JPanel left = new JPanel(new BorderLayout());
         left.add(intro, BorderLayout.NORTH);
-        left.add(new JScrollPane(list, ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED, ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER), BorderLayout.CENTER);
-        left.add(buttons, BorderLayout.SOUTH);
+        JPanel mine = new JPanel(new BorderLayout());
+        mine.add(new JScrollPane(list, ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED, ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER), BorderLayout.CENTER);
+        mine.add(buttons, BorderLayout.SOUTH);
+        JSplitPane leftSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, mine, suggestionsPanel());
+        leftSplit.setResizeWeight(0.55);
+        leftSplit.setBorder(null);
+        left.add(leftSplit, BorderLayout.CENTER);
         left.setPreferredSize(new Dimension(360, 400));
 
         JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, left, browser);
         split.setDividerLocation(370);
         add(split, BorderLayout.CENTER);
         reload(null);
+    }
+
+    /** Suggested topics: why each is suggested, how many stories it would have found, and one click to add (FET-F09). */
+    private JPanel suggestionsPanel() {
+        suggestionList.setCellRenderer(new DefaultListCellRenderer() {
+            @Override public Component getListCellRendererComponent(JList<?> l, Object v, int i, boolean s, boolean f) {
+                super.getListCellRendererComponent(l, v, i, s, f);
+                var sg = (com.linkeddesk.analysis.TopicSuggester.Suggestion) v;
+                String grey = s ? "#ffffff" : Theme.muted();
+                setText("<html><div style='width:" + Html.cssPx(270) + "px'><b>" + Html.esc(sg.name()) + "</b> <span style='color:" + grey + "'>· "
+                        + Html.esc(sg.desk().label()) + "</span><br><span style='color:" + (s ? "#ffffff" : Theme.note()) + "'>" + Html.esc(sg.reason()) + "</span><br>"
+                        + "<span style='color:" + grey + "'>" + sg.stories() + (sg.stories() == 1 ? " story" : " stories") + " in the last two weeks · "
+                        + Html.esc(sg.query()) + "</span></div></html>");
+                setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(0, 6, 1, 0, sg.desk().color()), BorderFactory.createEmptyBorder(5, 8, 5, 6)));
+                return this;
+            }
+        });
+        suggestionList.addListSelectionListener(e -> updateSuggestionButtons());
+        sugAdd.addActionListener(e -> addSuggested());
+        sugWatch.addActionListener(e -> watchSuggested());
+        sugHide.addActionListener(e -> hideSuggested());
+        JLabel head = new JLabel("Suggested topics");
+        head.setFont(head.getFont().deriveFont(Font.BOLD));
+        JPanel top = new JPanel(new BorderLayout());
+        top.setBorder(BorderFactory.createEmptyBorder(6, 8, 2, 8));
+        top.add(head, BorderLayout.NORTH);
+        top.add(sugInfo, BorderLayout.CENTER);
+        JPanel b = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 4));
+        b.add(sugAdd); b.add(sugWatch); b.add(sugHide);
+        JPanel p = new JPanel(new BorderLayout());
+        p.add(top, BorderLayout.NORTH);
+        p.add(new JScrollPane(suggestionList, ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED, ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER), BorderLayout.CENTER);
+        p.add(b, BorderLayout.SOUTH);
+        updateSuggestionButtons();
+        return p;
+    }
+
+    private void updateSuggestionButtons() {
+        boolean any = suggestionList.getSelectedValue() != null;
+        for (JButton x : List.of(sugAdd, sugWatch, sugHide)) x.setEnabled(any);
+    }
+
+    /** Works out suggestions in the background (from the last two weeks, your reading and watches). */
+    void refreshSuggestions() {
+        int my = ++sugRun;
+        sugInfo.setText("<html><span style='color:" + Theme.muted() + "'>Looking at the last two weeks…</span></html>");
+        new SwingWorker<List<com.linkeddesk.analysis.TopicSuggester.Suggestion>, Void>() {
+            @Override protected List<com.linkeddesk.analysis.TopicSuggester.Suggestion> doInBackground() throws Exception { return host.service().topicSuggestions(); }
+            @Override protected void done() {
+                if (my != sugRun) return;
+                try {
+                    var l = get();
+                    suggestions.clear();
+                    suggestions.addAll(l);
+                    sugInfo.setText("<html><span style='color:" + Theme.muted() + "'>" + (l.isEmpty() ? "Nothing to suggest right now. Suggestions come from what you read and star, and from rising news."
+                            : "From what you read and star, rising news and your watchlist.") + "</span></html>");
+                } catch (Exception ex) { sugInfo.setText("Could not work out suggestions: " + ex.getMessage()); }
+                updateSuggestionButtons();
+            }
+        }.execute();
+    }
+
+    private void addSuggested() {
+        var sg = suggestionList.getSelectedValue();
+        if (sg == null) return;
+        List<Topic> all = new ArrayList<>(TopicCatalog.load());
+        TopicEditor ed = new TopicEditor(SwingUtilities.getWindowAncestor(this), new Topic(sg.desk(), sg.name(), sg.query(), "en-US", false), all, true);
+        ed.setVisible(true);
+        Topic t = ed.result();
+        if (t == null) return;
+        all.add(t);
+        save(all, t.name());
+        if (!t.paused()) download(t);
+        suggestions.removeElement(sg);
+    }
+
+    private void watchSuggested() {
+        var sg = suggestionList.getSelectedValue();
+        if (sg == null) return;
+        host.addWatch(sg.query());
+        refreshSuggestions();
+    }
+
+    private void hideSuggested() {
+        var sg = suggestionList.getSelectedValue();
+        if (sg == null) return;
+        try { host.service().hideSuggestion(sg.name()); suggestions.removeElement(sg); host.status("\"" + sg.name() + "\" won't be suggested again."); }
+        catch (Exception ex) { host.status("Could not save: " + ex.getMessage()); }
     }
 
     void reload(String keep) {

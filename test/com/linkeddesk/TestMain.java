@@ -3,6 +3,16 @@ package com.linkeddesk;
 /** Runs every test suite; exits with status 1 if anything fails (so the build fails). */
 public final class TestMain {
     public static void main(String[] args) throws Exception {
+        try { runAll(); }
+        catch (Throwable t) {
+            // A crash in a test must fail the build, not leave it waiting on a test server thread.
+            t.printStackTrace();
+            System.out.println("\nTests stopped by an unexpected error.");
+            System.exit(1);
+        }
+    }
+
+    private static void runAll() throws Exception {
         Check c = new Check();
         com.linkeddesk.feeds.FeedParserTest.run(c);
         com.linkeddesk.store.ArticleStoreTest.run(c);
@@ -20,6 +30,7 @@ public final class TestMain {
         com.linkeddesk.store.StorageTest.run(c);
         com.linkeddesk.export.ExportTest.run(c);
         com.linkeddesk.feeds.MoreSourcesTest.run(c);
+        com.linkeddesk.service.P8Test.run(c);
         System.out.println();
         System.out.println(c.passed() + " checks passed, " + c.failures().size() + " failed");
         c.failures().forEach(f -> System.out.println("  FAILED: " + f));

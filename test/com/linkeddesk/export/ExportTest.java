@@ -31,7 +31,7 @@ public final class ExportTest {
         String oldHome = System.getProperty("linkeddesk.home");
         Path home = Files.createTempDirectory("ld-export");
         System.setProperty("linkeddesk.home", home.toString());
-        Files.writeString(home.resolve(".feeds-v1.1"), "test");
+        Files.writeString(home.resolve(".feeds-v1.1"), "test"); Files.writeString(home.resolve(".feeds-v1.8"), "test");
         try {
             Settings st = Settings.load();
             ArticleStore store = new ArticleStore(home.resolve("data"));

@@ -192,6 +192,14 @@ public final class Settings {
         p.setProperty("emailTo", to.trim());
     }
 
+    /** When the app was last open (for "Since you last looked", UI-F14). */
+    public synchronized long lastActive() { try { return Long.parseLong(p.getProperty("lastActive", "0").trim()); } catch (NumberFormatException e) { return 0; } }
+    public synchronized void setLastActive(long t) { p.setProperty("lastActive", Long.toString(t)); }
+
+    /** Leave opinion and analysis pieces out of the lists (ANL-F13). */
+    public synchronized boolean hideOpinion() { return Boolean.parseBoolean(p.getProperty("hideOpinion", "false")); }
+    public synchronized void setHideOpinion(boolean b) { p.setProperty("hideOpinion", Boolean.toString(b)); }
+
     /** Search also looks inside the full texts some feeds give (FET-F07). */
     public synchronized boolean searchFullText() { return Boolean.parseBoolean(p.getProperty("searchFullText", "true")); }
     public synchronized void setSearchFullText(boolean b) { p.setProperty("searchFullText", Boolean.toString(b)); }
@@ -220,6 +228,17 @@ public final class Settings {
         try { return Math.max(0, Integer.parseInt(p.getProperty("compressAfterMonths", "6").trim())); } catch (NumberFormatException e) { return 6; }
     }
     public synchronized void setCompressAfterMonths(int m) { p.setProperty("compressAfterMonths", Integer.toString(Math.max(0, m))); }
+    /** Look for a new version on GitHub once a day (OPS-F07). */
+    public synchronized boolean checkUpdates() { return Boolean.parseBoolean(p.getProperty("checkUpdates", "true")); }
+    public synchronized void setCheckUpdates(boolean b) { p.setProperty("checkUpdates", Boolean.toString(b)); }
+    public synchronized long updateCheckedAt() {
+        try { return Long.parseLong(p.getProperty("updateCheckedAt", "0").trim()); } catch (NumberFormatException e) { return 0; }
+    }
+    public synchronized void setUpdateCheckedAt(long t) { p.setProperty("updateCheckedAt", Long.toString(t)); }
+    /** A version the user chose to skip; it isn't offered again (a newer one is). */
+    public synchronized String updateSkip() { return p.getProperty("updateSkip", "").trim(); }
+    public synchronized void setUpdateSkip(String v) { p.setProperty("updateSkip", v == null ? "" : v.trim()); }
+
     public synchronized String backupFolder() { return p.getProperty("backupFolder", "").trim(); }
     public synchronized void setBackupFolder(String f) { p.setProperty("backupFolder", f == null ? "" : f.trim()); }
     /** Back up automatically once a week (after the daily download). */

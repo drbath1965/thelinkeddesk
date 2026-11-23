@@ -105,7 +105,7 @@ public final class Theme {
         if (!dark) return k.hex();
         return switch (k) {
             case WORLD -> "#6aa6ef"; case FINANCE -> "#4cc7b3"; case POLITICS -> "#c08ee0";
-            case SOCIETY -> "#f0ab3c"; case TECH -> "#9fb3c8";
+            case SOCIETY -> "#f0ab3c"; case TECH -> "#9fb3c8"; case DEFENSE -> "#a9bd6a";
         };
     }
     static Color desk(Category k) { return c(deskHex(k)); }

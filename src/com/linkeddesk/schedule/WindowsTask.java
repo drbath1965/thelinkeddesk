@@ -122,6 +122,24 @@ public final class WindowsTask {
         return s.replace("&quot;", "\"").replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&");
     }
 
+    /** True if the daily task runs this copy, false if it runs another, null if there's no task (or not Windows). */
+    public static Boolean runsThisCopy() {
+        if (!supported()) return null;
+        try { return !pointsElsewhere(run(List.of("schtasks", "/Query", "/TN", TASK_NAME, "/XML")), currentAction()); }
+        catch (Exception e) { return null; }
+    }
+
+    /** The "Name: value" lines of schtasks /V /FO LIST output (first occurrence of each name). */
+    public static java.util.Map<String, String> fields(String list) {
+        java.util.Map<String, String> m = new java.util.LinkedHashMap<>();
+        for (String l : list.split("\\R")) {
+            int c = l.indexOf(':');
+            if (c <= 0) continue;
+            m.putIfAbsent(l.substring(0, c).trim(), l.substring(c + 1).trim());
+        }
+        return m;
+    }
+
     /** Status of the task as Windows reports it: next run, last run and last result. */
     public static String query() throws Exception {
         return run(List.of("schtasks", "/Query", "/TN", TASK_NAME, "/V", "/FO", "LIST"));
@@ -213,7 +231,8 @@ public final class WindowsTask {
         return domain == null || domain.isBlank() ? user : domain + "\\" + user;
     }
 
-    private static Path jarPath() {
+    /** Where this copy runs from (the jar, or the classes folder in development). */
+    public static Path jarPath() {
         try {
             return Path.of(App.class.getProtectionDomain().getCodeSource().getLocation().toURI());
         } catch (Exception e) {
@@ -221,7 +240,7 @@ public final class WindowsTask {
         }
     }
 
-    private static String javaw() {
+    public static String javaw() {
         String cmd = ProcessHandle.current().info().command().orElse("");
         if (!cmd.isEmpty()) {
             File f = new File(cmd);

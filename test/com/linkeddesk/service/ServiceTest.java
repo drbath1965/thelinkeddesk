@@ -45,7 +45,7 @@ public final class ServiceTest {
                 {"Politics", "Politico", "politico.atom"}, {"Politics", "NPR Politics", "npr_politics.xml"}, {"Society", "Deutsche Welle", "dw.rdf"},
                 {"World", "Google News World", "gnews.xml"}};
         for (String[] f : list) feeds.append(f[0]).append(" | ").append(f[1]).append(" | ").append(res.resolve(f[2]).toUri()).append('\n');
-        Files.writeString(home.resolve(".feeds-v1.1"), "test: no v1.1 feed upgrade");   // keep the test offline
+        Files.writeString(home.resolve(".feeds-v1.1"), "test: no v1.1 feed upgrade"); Files.writeString(home.resolve(".feeds-v1.8"), "test: no v1.1 feed upgrade");   // keep the test offline
         FeedCatalog.saveRawText(feeds.toString());
 
         // Local stand-in for Google News / Bing News search feeds.

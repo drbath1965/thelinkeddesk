@@ -124,7 +124,7 @@ public final class PhonePage {
     }
 
     private static String short_(Category c) {
-        return switch (c) { case SOCIETY -> "Society"; case TECH -> "Tech"; default -> c.label(); };
+        return switch (c) { case SOCIETY -> "Society"; case TECH -> "Tech"; case DEFENSE -> "Defense"; default -> c.label(); };
     }
 
     static String esc(String s) { return s == null ? "" : s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;"); }

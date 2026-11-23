@@ -259,6 +259,7 @@ public final class NewsService {
 
     /** Articles as the analysis sees them: translated into English where a translation is saved (ANL-F11). */
     public List<Article> prepare(List<Article> in) {
+        if (settings.hideOpinion()) in = in.stream().filter(a -> !com.linkeddesk.analysis.Coverage.opinion(a)).toList();
         var tr = translations();
         if (tr.isEmpty()) return in;
         List<Article> out = new ArrayList<>(in.size());
@@ -596,6 +597,15 @@ public final class NewsService {
         return linkChecks;
     }
 
+    /** How the outlets in this story framed it (AI-F07): Claude compares their coverage (cached; within the budget). */
+    public com.linkeddesk.ai.Framing.Result framing(StoryCluster c) throws Exception {
+        if (c.sourceCount() < 3) throw new IllegalStateException("Comparing needs at least three outlets; this story has " + c.sourceCount() + ".");
+        java.util.function.Function<Article, String> full = store::fullText;
+        var refs = com.linkeddesk.ai.Framing.outlets(c, full);
+        String reply = claude().ask("framing", com.linkeddesk.ai.Framing.prompt(c, refs, full), com.linkeddesk.ai.Framing.MAX_TOKENS);
+        return com.linkeddesk.ai.Framing.parse(reply, c, refs);
+    }
+
     /** "Ask Claude why" for one link (cached; counts against the budget). */
     public String explainLink(com.linkeddesk.model.StoryLink link) throws Exception {
         return claude().ask("explain", com.linkeddesk.ai.ClaudeClient.explainPrompt(link), 700);
@@ -792,6 +802,32 @@ public final class NewsService {
                 .deliver(alert, java.time.LocalTime.now(), settings.quietFrom(), settings.quietTo());
         if (!alert.isEmpty()) Logs.run("notify", (shown == null ? "held for after quiet hours: " : "shown: ") + alert.title(), alert.text(), 0);
         return shown;
+    }
+
+    // ------------------------------------------------------------------ suggested topics (FET-F09)
+
+    private java.nio.file.Path hiddenSuggestionsFile() { return AppPaths.home().resolve("topic-suggestions-hidden.txt"); }
+
+    /** Topics worth following, with the reason for each (from the last two weeks, your reading, your watches). */
+    public List<com.linkeddesk.analysis.TopicSuggester.Suggestion> topicSuggestions() throws IOException {
+        Analyzer.Result r = analyze(14);
+        var reads = reads();
+        List<com.linkeddesk.feeds.Topic> topics = com.linkeddesk.feeds.TopicCatalog.load();
+        List<String> existing = new ArrayList<>(), topicTexts = new ArrayList<>();
+        for (var t : topics) { existing.add(t.name()); existing.add(t.query()); topicTexts.add(t.name().toLowerCase()); topicTexts.add(t.query().toLowerCase()); }
+        java.util.Map<String, String> watchMap = new java.util.LinkedHashMap<>();
+        for (var w : watches().all()) { existing.add(w.name()); existing.add(w.words()); watchMap.put(w.name(), w.words()); }
+        java.util.Set<String> hidden = new java.util.HashSet<>();
+        if (java.nio.file.Files.exists(hiddenSuggestionsFile()))
+            for (String l : java.nio.file.Files.readAllLines(hiddenSuggestionsFile())) if (!l.isBlank()) hidden.add(l.strip().toLowerCase());
+        return com.linkeddesk.analysis.TopicSuggester.suggest(r.stories(), System.currentTimeMillis(), c -> !reads.isUnread(c), reads::isStarred,
+                existing, topicTexts, watchMap, hidden, topics.size());
+    }
+
+    /** "Not interested": never suggest this again. */
+    public void hideSuggestion(String name) throws IOException {
+        java.nio.file.Files.writeString(hiddenSuggestionsFile(), name.strip() + "\n", java.nio.charset.StandardCharsets.UTF_8,
+                java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
     }
 
     // ------------------------------------------------------------------ export and the weekly report (EXP-F01, EXP-F02)

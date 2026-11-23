@@ -91,7 +91,8 @@ final class Html {
         if (corrections) sb.append(" <span class='act'>· <a href='desk:'>Move to another desk…</a></span>");
         if (x != null) {
             sb.append(" <span class='act'>· ").append(x.starred() ? "<span class='star'>★ Starred</span> <a href='unstar:'>unstar</a>" : "<a href='star:'>☆ Star</a>")
-              .append(" · <a href='unread:'>Mark unread</a> · <a href='watch:'>Watch this subject…</a> · <a href='copy:'>Copy</a> · <a href='export:'>Export…</a></span>");
+              .append(" · <a href='unread:'>Mark unread</a> · <a href='watch:'>Watch this subject…</a> · <a href='copy:'>Copy</a> · <a href='export:'>Export…</a>")
+              .append(c.sourceCount() >= 3 ? " · <a href='framing:'>How outlets framed it</a>" : "").append("</span>");
             if (x.newSinceRead()) sb.append(" <span class='new'>new coverage since you read it</span>");
         }
         // The headline opens the article, and a plain "Read it at …" link sits right under it.
@@ -164,6 +165,8 @@ final class Html {
         for (Article a : c.articlesNewestFirst()) {
             sb.append("<tr><td><a href='").append(esc(a.url)).append("'>").append(hl.apply(a.title)).append("</a><br>")
               .append("<span class='meta'>").append(esc(a.source)).append(a.kindLabel().isEmpty() ? "" : " · " + a.kindLabel())
+              .append(com.linkeddesk.analysis.Coverage.opinion(a) ? " · <b>Opinion / analysis</b>" : "")
+              .append(copyOf(c, a))
               .append(" · ").append(WHEN.format(Instant.ofEpochMilli(a.published))).append("</span>");
             if (!a.originalTitle.isEmpty())
                 sb.append("<br><span class='terms'>Translated from ").append(esc(com.linkeddesk.analysis.Language.name(a.lang))).append(" · original: ")
@@ -297,6 +300,41 @@ final class Html {
     }
 
     /** An answer from the archive, with its citations as links and the stories it was given. */
+    /** The framing comparison (AI-F07): each point with links to the outlets it cites. */
+    static String framing(com.linkeddesk.ai.Framing.Result r, String budget) {
+        StringBuilder sb = new StringBuilder("<html><head><style>").append(css()).append("</style></head><body>");
+        sb.append("<h1>How outlets framed it</h1><p class='sum'>").append(esc(r.story().headline)).append("</p>");
+        sb.append("<p class='meta'>Written by Claude from the headlines and summaries of ").append(r.refs().size())
+          .append(" outlets (full text where a feed gives it). It describes the coverage; it doesn't say which outlet is right. ")
+          .append(esc(budget)).append("</p>");
+        java.util.function.Function<String, String> cite = line -> {
+            java.util.regex.Matcher m = com.linkeddesk.ai.Framing.TAG.matcher(esc(line));
+            StringBuilder out = new StringBuilder();
+            while (m.find()) {
+                Article a = r.refs().get("O" + m.group(1));
+                m.appendReplacement(out, java.util.regex.Matcher.quoteReplacement(a == null ? "" : " <a href='" + esc(a.url) + "'>[" + esc(a.source) + "]</a>"));
+            }
+            m.appendTail(out);
+            return out.toString();
+        };
+        if (r.isEmpty()) sb.append("<p>Claude found nothing to compare in this coverage.</p>");
+        for (String s : com.linkeddesk.ai.Framing.SECTIONS) {
+            var lines = r.sections().get(s);
+            if (lines.isEmpty()) continue;
+            sb.append("<h2>").append(esc(com.linkeddesk.ai.Framing.TITLES.get(s))).append("</h2><ul>");
+            for (String l : lines) sb.append("<li>").append(cite.apply(l)).append("</li>");
+            sb.append("</ul>");
+        }
+        if (!r.problems().isEmpty()) sb.append("<p class='act'>").append(esc(String.join(" ", r.problems()))).append("</p>");
+        sb.append("<h2>Outlets Claude was given</h2><table>");
+        for (var e : r.refs().entrySet()) {
+            Article a = e.getValue();
+            sb.append("<tr><td width='34' class='meta'>[").append(e.getKey()).append("]</td><td><a href='").append(esc(a.url)).append("'>").append(esc(a.title))
+              .append("</a><br><span class='meta'>").append(esc(a.source)).append(r.cited().contains(e.getKey()) ? " · cited" : " · not cited").append("</span></td></tr>");
+        }
+        return sb.append("</table></body></html>").toString();
+    }
+
     static String answer(com.linkeddesk.ai.ArchiveQA.Answer a, String budget) {
         StringBuilder sb = new StringBuilder("<html><head><style>").append(css()).append("</style></head><body>");
         sb.append("<h1>").append(esc(a.question())).append("</h1>");
@@ -330,6 +368,12 @@ final class Html {
     }
 
     /** "Covered by 5 outlets in 3 regions: Europe 2 · North America 2 · Middle East 1", or a warning. */
+    /** " · same AP report" on an article that is a wire copy. */
+    static String copyOf(StoryCluster c, Article a) {
+        for (var cp : c.copies) if (cp.articles().contains(a)) return " · " + (cp.agency().isEmpty() ? "same text as " + (cp.outlets() - 1) + " other" + (cp.outlets() == 2 ? "" : "s") : "same " + esc(cp.agency()) + " report");
+        return "";
+    }
+
     static String spread(StoryCluster c, com.linkeddesk.analysis.Regions.Spread sp) {
         StringBuilder sb = new StringBuilder("<p class='terms'>");
         StringBuilder parts = new StringBuilder();
@@ -344,6 +388,17 @@ final class Html {
             sb.append("<span class='warn'>⚠ One region:</span> ").append(sp.outlets()).append(" outlets, all ").append(parts);
         } else {
             sb.append("Covered by ").append(sp.outlets()).append(" outlets in ").append(sp.regionCount()).append(" regions: ").append(parts);
+        }
+        // ANL-F12/F13: how much of that is independent reporting.
+        int opinions = 0;
+        for (Article a : c.articles) if (com.linkeddesk.analysis.Coverage.opinion(a)) opinions++;
+        if (!c.copies.isEmpty() || opinions > 0) {
+            sb.append("<br>");
+            List<String> why = new java.util.ArrayList<>();
+            for (var cp : c.copies) why.add(cp.outlets() + " of them carry " + (cp.agency().isEmpty() ? "the same text" : "the same " + esc(cp.agency()) + " report"));
+            if (opinions > 0) why.add(opinions + (opinions == 1 ? " is opinion or analysis" : " are opinion or analysis"));
+            sb.append(String.join("; ", why)).append(", so <b>").append(c.independentCount()).append(c.independentCount() == 1 ? " outlet reports" : " outlets report")
+              .append(" it independently</b>.");
         }
         return sb.append("</p>").toString();
     }

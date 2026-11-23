@@ -103,9 +103,19 @@ public final class Sources {
 
     /** How "covered" a story counts: its outlets, each counted by its weight. */
     public double coverage(StoryCluster c) {
-        if (!any()) return c.sourceCount();
+        if (!any()) return c.independentCount();
+        // Each outlet by its weight; a group of outlets carrying the same wire copy counts once (its highest weight),
+        // and opinion pieces don't count (ANL-F12, ANL-F13).
+        java.util.Map<String, Double> units = new java.util.HashMap<>();
+        java.util.Map<String, String> group = new java.util.HashMap<>();
+        for (var cp : c.copies) { String k = "copy:" + System.identityHashCode(cp); for (Article a : cp.articles()) group.putIfAbsent(a.source, k); }
+        for (Article a : c.articles) {
+            if (com.linkeddesk.analysis.Coverage.opinion(a)) continue;
+            units.merge(group.getOrDefault(a.source, a.source), weight(a.source), Math::max);
+        }
+        if (units.isEmpty()) for (String o : c.sources()) units.put(o, weight(o));
         double s = 0;
-        for (String o : c.sources()) s += weight(o);
+        for (double w : units.values()) s += w;
         return s;
     }
 

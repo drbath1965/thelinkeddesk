@@ -43,6 +43,8 @@ interface Host {
 
     /** Copies a story with its sources to the clipboard; saves it as a file (EXP-F01). */
     default void copyStory(StoryCluster c) { }
+    /** How the outlets in a story framed it (AI-F07). */
+    default void framing(StoryCluster c) { }
     default void exportStory(StoryCluster c) { }
 
     /** A story was starred or unstarred: refresh the Saved tab. */

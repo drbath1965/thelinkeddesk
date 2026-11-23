@@ -32,7 +32,8 @@ public final class Thresholds {
             Category.FINANCE, new double[]{0.36, 0.08},
             Category.POLITICS, new double[]{0.36, 0.08},
             Category.SOCIETY, new double[]{0.34, 0.14},
-            Category.TECH, new double[]{0.36, 0.08});
+            Category.TECH, new double[]{0.36, 0.08},
+            Category.DEFENSE, new double[]{0.36, 0.08});
 
     private final Map<Category, Double> sameEvent = new EnumMap<>(Category.class);
     private final Map<Category, Double> link = new EnumMap<>(Category.class);
@@ -41,7 +42,11 @@ public final class Thresholds {
     public static Thresholds defaults() { return new Thresholds(); }
 
     public Thresholds() {
-        for (Category c : Category.values()) { sameEvent.put(c, SHIPPED.get(c)[0]); link.put(c, SHIPPED.get(c)[1]); }
+        for (Category c : Category.values()) {
+            double[] v = SHIPPED.getOrDefault(c, new double[]{0.36, 0.08});    // a desk added later starts from the shared values
+            sameEvent.put(c, v[0]);
+            link.put(c, v[1]);
+        }
     }
 
     /** One value for every desk (the old single setting). */

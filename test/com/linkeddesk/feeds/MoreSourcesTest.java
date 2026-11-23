@@ -164,7 +164,7 @@ public final class MoreSourcesTest {
         String oldHome = System.getProperty("linkeddesk.home");
         Path home = Files.createTempDirectory("ld-lang");
         System.setProperty("linkeddesk.home", home.toString());
-        Files.writeString(home.resolve(".feeds-v1.1"), "test");
+        Files.writeString(home.resolve(".feeds-v1.1"), "test"); Files.writeString(home.resolve(".feeds-v1.8"), "test");
         AtomicInteger calls = new AtomicInteger();
         Map<String, String[]> english = Map.of(
                 "Ucrania afirma que hundió un buque de guerra ruso frente a Libia con drones navales",

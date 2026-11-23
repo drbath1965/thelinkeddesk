@@ -96,6 +96,7 @@ public final class App {
             return;
         }
 
+        if (a.contains("--after-update")) SingleInstance.waitForOldWindow(AppPaths.home(), 30_000);
         MainWindow[] window = new MainWindow[1];
         boolean first = SingleInstance.claim(AppPaths.home(), () -> SwingUtilities.invokeLater(() -> {
             if (window[0] != null) window[0].bringToFront();

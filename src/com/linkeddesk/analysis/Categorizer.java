@@ -46,13 +46,21 @@ public final class Categorizer {
                 "famine", "hunger", "humanitarian", "aid", "culture", "festival", "cop31", "cop30", "biodiversity"));
         RULES.put(Category.TECH, words(
                 "ai", "artificial intelligence", "chip", "chips", "semiconductor", "semiconductors", "software",
-                "tech", "technology", "cyber", "cyberattack", "hack", "hackers", "data breach", "space", "nasa",
-                "spacex", "rocket", "satellite", "smartphone", "iphone", "apple", "google", "alphabet", "microsoft",
+                "tech", "technology", "cyber", "cyberattack", "hack", "hackers", "data breach", "smartphone", "iphone", "apple", "google", "alphabet", "microsoft",
                 "meta", "amazon", "nvidia", "openai", "anthropic", "chatgpt", "claude", "robot", "robots", "quantum",
                 "science", "scientists", "research", "researchers", "study", "telescope", "physics", "biology",
                 "genetic", "app", "apps", "social media", "tiktok", "algorithm"));
+        RULES.put(Category.DEFENSE, words(
+                "pentagon", "defense department", "department of defense", "dod", "war department", "army", "navy", "air force",
+                "marine corps", "space force", "missile defense", "missile defense agency", "golden dome", "hypersonic", "hypersonics",
+                "contract award", "defense contract", "defense contractor", "defense budget", "ndaa", "procurement", "munitions",
+                "lockheed", "lockheed martin", "raytheon", "rtx", "northrop", "northrop grumman", "general dynamics", "l3harris",
+                "boeing defense", "huntington ingalls", "anduril", "leidos", "saic", "booz allen", "f-35", "b-21", "sentinel icbm",
+                "redstone", "redstone arsenal", "huntsville", "space command", "darpa", "fighter jet", "warship", "submarine",
+                "space", "nasa", "spacex", "blue origin", "ula", "rocket", "launch", "launches", "satellite", "satellites", "orbit",
+                "artemis", "space station", "iss", "astronaut", "astronauts", "moon", "mars", "marshall space flight center", "sls"));
         RULES.put(Category.WORLD, words(
-                "war", "military", "troops", "army", "strike", "strikes", "airstrike", "airstrikes", "missile",
+                "war", "military", "troops", "strike", "strikes", "airstrike", "airstrikes", "missile",
                 "missiles", "drone", "drones", "ceasefire", "truce", "peace talks", "diplomat", "diplomats",
                 "diplomatic", "summit", "border", "attack", "attacks", "killed", "invasion", "sanctions", "nato",
                 "united nations", "un", "embassy", "hostages", "rebels", "militants", "insurgents", "coup",

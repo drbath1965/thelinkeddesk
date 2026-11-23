@@ -8,7 +8,8 @@ public enum Category {
     FINANCE("Finance", new Color(0x0F7A6A)),
     POLITICS("Politics", new Color(0x7A3D9B)),
     SOCIETY("Society & Climate", new Color(0xB06A00)),
-    TECH("Tech & Science", new Color(0x34495E));
+    TECH("Tech & Science", new Color(0x34495E)),
+    DEFENSE("Defense & Space", new Color(0x56662A));
 
     private final String label;
     private final Color color;
@@ -30,6 +31,7 @@ public enum Category {
         if (k.startsWith("FIN") || k.startsWith("BUS") || k.startsWith("ECON") || k.startsWith("MARK")) return FINANCE;
         if (k.startsWith("POL")) return POLITICS;
         if (k.startsWith("TECH") || k.startsWith("SCI")) return TECH;
+        if (k.startsWith("DEF") || k.startsWith("SPACE") || k.startsWith("MIL") || k.startsWith("AERO")) return DEFENSE;
         return WORLD;
     }
 }

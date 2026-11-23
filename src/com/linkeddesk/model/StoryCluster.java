@@ -45,6 +45,19 @@ public final class StoryCluster {
 
     public int sourceCount() { return sources().size(); }
 
+    /** Groups of articles that are one report carried by several outlets (ANL-F12); set by the analysis. */
+    public java.util.List<com.linkeddesk.analysis.Coverage.Copies> copies = java.util.List.of();
+    private int independent = -1;
+
+    /** Outlets with their own reporting: wire copies count once, opinion pieces not at all (ANL-F12, ANL-F13). */
+    public int independentCount() {
+        if (independent < 0) independent = com.linkeddesk.analysis.Coverage.independent(this);
+        return independent;
+    }
+
+    /** Called when the articles or copies change. */
+    public void recount() { independent = -1; }
+
     /** True if the story shows in this desk (its main desk or its second desk). */
     public boolean inDesk(Category c) { return category == c || also == c; }
 

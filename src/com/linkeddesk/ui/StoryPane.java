@@ -127,6 +127,8 @@ final class StoryPane extends JScrollPane {
         } else if (href.startsWith("full:") && current != null) {
             String id = href.substring(5);
             current.articles.stream().filter(a -> a.id.equals(id)).findFirst().ifPresent(this::showFullText);
+        } else if (href.equals("framing:") && current != null) {
+            host.framing(current);
         } else if (href.equals("copy:") && current != null) {
             host.copyStory(current);
         } else if (href.equals("export:") && current != null) {
