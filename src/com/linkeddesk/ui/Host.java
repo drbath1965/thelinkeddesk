@@ -31,6 +31,16 @@ interface Host {
     /** Your corrections changed (link verdicts, desk rules, word lists, thresholds): regroup every view. */
     void correctionsChanged();
 
+    /** The watchlist changed or was looked at: refresh highlights. */
+    default void watchesChanged() { }
+
+    /** The watches a story matches (for the list badge), and whether it has articles you haven't seen in that watch. */
+    default java.util.List<String> watchesFor(StoryCluster c) { return java.util.List.of(); }
+    default boolean newForWatch(StoryCluster c) { return false; }
+
+    /** Opens the "watch a subject" editor with these words. */
+    default void addWatch(String words) { }
+
     /** A story was starred or unstarred: refresh the Saved tab. */
     default void savedChanged() { }
 }

@@ -14,6 +14,8 @@ public final class FetchReport {
     public Instant finished;
     public final List<FeedResult> results = new ArrayList<>();
     public int totalAdded;
+    /** The articles this run added (for watchlist notifications and "new since"). Kept in memory only. */
+    public final List<com.linkeddesk.model.Article> addedArticles = new ArrayList<>();
     public boolean cancelled;
     public int expected;
 

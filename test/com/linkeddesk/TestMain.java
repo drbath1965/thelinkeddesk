@@ -16,6 +16,7 @@ public final class TestMain {
         com.linkeddesk.schedule.WindowsTaskTest.run(c);
         com.linkeddesk.ai.ClaudeClientTest.run(c);
         com.linkeddesk.ai.ClaudeFeaturesTest.run(c);
+        com.linkeddesk.alerts.AlertsTest.run(c);
         System.out.println();
         System.out.println(c.passed() + " checks passed, " + c.failures().size() + " failed");
         c.failures().forEach(f -> System.out.println("  FAILED: " + f));

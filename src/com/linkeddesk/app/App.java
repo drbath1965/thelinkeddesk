@@ -39,6 +39,14 @@ public final class App {
                 String claude = service.dailyClaude();
                 Logs.run("claude", claude, "", 0);
                 System.out.println(claude);
+                // Watchlist notification (the app may be closed; the icon appears just long enough to show it).
+                try {
+                    var shown = service.notifyAfterDownload(r, com.linkeddesk.alerts.Tray.brief());
+                    if (shown != null) System.out.println("Notified: " + shown.title());
+                } catch (Exception e) { Logs.error("Watchlist notification after the daily download", e); }
+                // Email the briefing (once a day, if switched on).
+                try { System.out.println(service.emailBriefing(false)); }
+                catch (Exception e) { Logs.error("Emailing the briefing", e); System.out.println("Email failed: " + e.getMessage()); }
             } catch (NewsService.BusyException busy) {
                 Logs.run("download", "skipped: another download was already running", "", 0);
                 System.out.println("Skipped: " + busy.getMessage());

@@ -188,6 +188,13 @@ public final class Lexicon {
     /** The canonical key for this normalized key, or null if it isn't a known name. */
     public String canonical(String key) { return alias.get(key); }
 
+    /** Every normalized key that stands for this canonical key (the name itself and its aliases). */
+    public List<String> keysFor(String canonicalKey) {
+        List<String> out = new ArrayList<>();
+        for (var e : alias.entrySet()) if (e.getValue().equals(canonicalKey)) out.add(e.getKey());
+        return out;
+    }
+
     /** Display form of a canonical key ("Federal Reserve"). */
     public String display(String canonicalKey) { return display.get(canonicalKey); }
 

@@ -87,7 +87,7 @@ final class Html {
         if (corrections) sb.append(" <span class='act'>· <a href='desk:'>Move to another desk…</a></span>");
         if (x != null) {
             sb.append(" <span class='act'>· ").append(x.starred() ? "<span class='star'>★ Starred</span> <a href='unstar:'>unstar</a>" : "<a href='star:'>☆ Star</a>")
-              .append(" · <a href='unread:'>Mark unread</a></span>");
+              .append(" · <a href='unread:'>Mark unread</a> · <a href='watch:'>Watch this subject…</a></span>");
             if (x.newSinceRead()) sb.append(" <span class='new'>new coverage since you read it</span>");
         }
         sb.append("<h1>").append(hl.apply(c.headline)).append("</h1>");
@@ -149,6 +149,8 @@ final class Html {
               .append("<span class='meta'>").append(esc(a.source)).append(" · ").append(WHEN.format(Instant.ofEpochMilli(a.published)))
               .append("</span>");
             if (corrections && c.articles.size() > 1) sb.append(" <span class='act'>· <a href='split:").append(esc(a.id)).append("'>Not this story</a></span>");
+            if (corrections) sb.append(" <span class='act'>· <a href='mute:").append(java.net.URLEncoder.encode(a.source, java.nio.charset.StandardCharsets.UTF_8))
+                    .append("'>Mute this outlet</a></span>");
             if (!a.summary.isEmpty() && !a.summary.equals(c.summary)) {
                 String s = a.summary.length() > 280 ? a.summary.substring(0, 280) + "…" : a.summary;
                 sb.append("<br><span class='terms'>").append(hl.apply(s)).append("</span>");

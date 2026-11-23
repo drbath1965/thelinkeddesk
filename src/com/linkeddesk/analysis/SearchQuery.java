@@ -169,6 +169,30 @@ public final class SearchQuery {
      * all be present, so the slower accent-insensitive check can be skipped. Text with accented or other
      * non-ASCII letters is never rejected here, so accent folding still applies to it.
      */
+    /** An article's text as matching sees it (folded once, for checking many queries against one article). */
+    public static String folded(Article a) { return fold(a.title + " \n " + a.summary + " \n " + a.source); }
+
+    /** Like {@link #matches(Article)}, for text from {@link #folded(Article)}. */
+    public boolean matchesFolded(String hay) {
+        if (anyOf.isEmpty()) return false;
+        if (!plain.isEmpty()) {
+            boolean any = false;
+            for (List<String> g : plain) {
+                boolean all = true;
+                for (String w : g) if (!hay.contains(w)) { all = false; break; }
+                if (all) { any = true; break; }
+            }
+            if (!any) return false;
+        }
+        for (Pattern p : exclude) if (p.matcher(hay).find()) return false;
+        for (List<Pattern> g : anyOf) {
+            boolean all = true;
+            for (Pattern p : g) if (!p.matcher(hay).find()) { all = false; break; }
+            if (all) return true;
+        }
+        return false;
+    }
+
     public boolean cannotMatch(String raw) {
         if (plain.isEmpty()) return false;
         for (int i = 0; i < raw.length(); i++) if (raw.charAt(i) > 127) return false;
@@ -183,6 +207,9 @@ public final class SearchQuery {
 
     /** Lower case without accents, so "Rodríguez" matches "rodriguez". */
     static String fold(String s) {
+        boolean ascii = true;
+        for (int i = 0; i < s.length(); i++) if (s.charAt(i) > 127) { ascii = false; break; }
+        if (ascii) return s.toLowerCase(Locale.ROOT);
         String n = Normalizer.normalize(s, Normalizer.Form.NFD).replaceAll("\\p{M}+", "");
         return n.toLowerCase(Locale.ROOT).replace('’', '\'');
     }

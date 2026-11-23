@@ -187,7 +187,9 @@ public final class NewsService {
                 }
                 try {
                     if (fi.ok()) {
-                        added = store.addAll(fi.items()).size();
+                        List<Article> newOnes = store.addAll(fi.items());
+                        added = newOnes.size();
+                        report.addedArticles.addAll(newOnes);
                         if (foundIds != null) foundIds.accept(fi.items().stream().map(store::canonicalId).toList());
                         if (fi.feed().isTopic()) {
                             List<String> canon = fi.items().stream().map(store::canonicalId).toList();
@@ -218,18 +220,78 @@ public final class NewsService {
         return report;
     }
 
-    /** Analyses articles published in the last {@code days} days (0 = all history). */
+    /** Analyses articles published in the last {@code days} days (0 = all history), leaving out muted outlets. */
     public Analyzer.Result analyze(int days) {
         List<Article> articles = days <= 0 ? store.all()
                 : store.since(System.currentTimeMillis() - days * 24L * 3600_000);
-        return Analyzer.analyze(articles, options());
+        return tieTickers(Analyzer.analyze(sources().visible(articles), options()));
+    }
+
+    // ------------------------------------------------------------------ P5: watchlist, sources, tickers
+
+    private com.linkeddesk.alerts.Sources sources;
+    private com.linkeddesk.alerts.Watches watches;
+    private com.linkeddesk.alerts.Tickers tickers;
+
+    /** Outlets you muted or weighted (sources.txt, re-read when it changes). */
+    public synchronized com.linkeddesk.alerts.Sources sources() {
+        if (sources == null) sources = new com.linkeddesk.alerts.Sources(AppPaths.home());
+        return sources.load();
+    }
+
+    /** Your watchlist (watchlist.txt), with aliases from aliases.txt. */
+    public synchronized com.linkeddesk.alerts.Watches watches() {
+        if (watches == null) watches = new com.linkeddesk.alerts.Watches(AppPaths.home());
+        return watches.load(options().lexicon());
+    }
+
+    /** The tickers you follow (tickers.txt). */
+    public synchronized com.linkeddesk.alerts.Tickers tickers() {
+        if (tickers == null) tickers = new com.linkeddesk.alerts.Tickers(AppPaths.home());
+        return tickers.load();
+    }
+
+    /** Stories about a company you follow also show in Finance (ALR-F05). */
+    private Analyzer.Result tieTickers(Analyzer.Result r) {
+        var t = tickers();
+        if (t.isEmpty()) return r;
+        for (StoryCluster c : r.stories()) {
+            if (c.category == Category.FINANCE || c.also != null) continue;
+            if (!t.of(c).isEmpty()) c.also = Category.FINANCE;
+        }
+        return r;
+    }
+
+    /** Stories about a watch over the last {@code days} days (from the archive), newest first. */
+    public Analyzer.Result watchStories(com.linkeddesk.alerts.Watches.Watch w, int days) throws IOException {
+        long since = System.currentTimeMillis() - days * 86_400_000L;
+        store.ensureLoaded(since);
+        var ws = watches();
+        List<Article> hits = new ArrayList<>();
+        for (Article a : sources().visible(store.since(since))) if (ws.matching(a).stream().anyMatch(x -> x.name().equals(w.name()))) hits.add(a);
+        Analyzer.Result r = Analyzer.analyze(hits, options());
+        r.stories().sort(Comparator.comparingLong((StoryCluster c) -> c.lastSeen).reversed());
+        return r;
+    }
+
+    /** Stories about a ticker over the last {@code days} days, newest first. */
+    public Analyzer.Result tickerStories(String symbol, int days) throws IOException {
+        long since = System.currentTimeMillis() - days * 86_400_000L;
+        store.ensureLoaded(since);
+        var t = tickers();
+        List<Article> hits = new ArrayList<>();
+        for (Article a : sources().visible(store.since(since))) if (t.of(a).contains(symbol)) hits.add(a);
+        Analyzer.Result r = Analyzer.analyze(hits, options());
+        r.stories().sort(Comparator.comparingLong((StoryCluster c) -> c.lastSeen).reversed());
+        return r;
     }
 
     /** The daily briefing: the last 24 hours, analysed with four days of context (for storylines and links). */
     public com.linkeddesk.analysis.Briefing briefing() throws IOException {
         long now = System.currentTimeMillis();
         store.ensureLoaded(now - 4 * 86_400_000L);
-        return com.linkeddesk.analysis.Briefing.build(Analyzer.analyze(store.since(now - 4 * 86_400_000L), options()), now);
+        var src = sources();
+        return com.linkeddesk.analysis.Briefing.build(tieTickers(Analyzer.analyze(src.visible(store.since(now - 4 * 86_400_000L)), options())), now, src::coverage);
     }
 
     /** Stories made only of articles a topic found. */
@@ -238,7 +300,7 @@ public final class NewsService {
         var ids = topicHits.articles(topic);
         List<Article> list = new ArrayList<>();
         for (Article a : store.since(since)) if (ids.contains(a.id)) list.add(a);
-        return Analyzer.analyze(list, options());
+        return Analyzer.analyze(sources().visible(list), options());
     }
 
     // ------------------------------------------------------------------ search
@@ -275,6 +337,7 @@ public final class NewsService {
             java.util.function.Predicate<Article> fields = fieldTest(q);
             store.scan(line -> !q.cannotMatch(line), a -> filter.accepts(a) && (!q.hasWords() || q.matches(a)) && fields.test(a), hits::add);
         }
+        if (q.fields().stream().noneMatch(f -> f.name().equals("source"))) hits = new ArrayList<>(sources().visible(hits));  // muted outlets only on request
         hits.sort(Comparator.comparingLong((Article a) -> a.published).reversed());
         int total = hits.size();
         boolean capped = total > SEARCH_CAP;
@@ -547,7 +610,8 @@ public final class NewsService {
         }
         SearchQuery sq = new SearchQuery(String.join(" OR ", each.stream().map(SearchQuery::text).toList()));
         java.util.Map<Article, int[]> hitsOf = new java.util.HashMap<>();   // per article: which words, in headline?
-        store.scan(line -> !sq.cannotMatch(line), a -> a.published >= since && sq.matches(a), a -> {
+        var src = sources();
+        store.scan(line -> !sq.cannotMatch(line), a -> a.published >= since && !src.muted(a.source) && sq.matches(a), a -> {
             Article headlineOnly = new Article(a.id, a.url, a.title, "", "", a.feedCategory, 0, 0);
             int[] h = new int[each.size()];
             for (int i = 0; i < each.size(); i++) if (each.get(i).matches(a)) h[i] = each.get(i).matches(headlineOnly) ? 2 : 1;
@@ -613,5 +677,72 @@ public final class NewsService {
         if (refs.isEmpty()) return new com.linkeddesk.ai.ArchiveQA.Answer(question, "", refs, List.of(), List.of(), searched[0]);
         String text = claude().ask("ask", com.linkeddesk.ai.ArchiveQA.prompt(question, refs), com.linkeddesk.ai.ArchiveQA.MAX_TOKENS);
         return com.linkeddesk.ai.ArchiveQA.parse(question, text, refs, searched[0]);
+    }
+
+    // ------------------------------------------------------------------ after each download (P5)
+
+    private com.linkeddesk.alerts.Mailer mailer = new com.linkeddesk.alerts.Mailer();
+
+    /** For tests: a mailer that trusts a test certificate. */
+    public void useMailer(com.linkeddesk.alerts.Mailer m) { this.mailer = m; }
+
+    /**
+     * After a download: one grouped notification for new watchlist matches (and new links between desks, if
+     * switched on); held during quiet hours. Returns what was shown, or null.
+     */
+    public com.linkeddesk.alerts.Alerts.Alert notifyAfterDownload(FetchReport r, com.linkeddesk.alerts.Alerts.Display display) throws IOException {
+        settings.reload();
+        if (!settings.notifications()) return null;
+        var hits = watches().newHits(sources().visible(r.addedArticles));
+        int links = 0;
+        if (settings.notifyLinks() && !r.addedArticles.isEmpty()) {
+            java.util.Set<String> added = new java.util.HashSet<>();
+            for (Article a : r.addedArticles) added.add(a.id);
+            for (var l : briefing().newLinks()) {
+                boolean fresh = l.from().articles.stream().anyMatch(a -> added.contains(a.id)) || l.to().articles.stream().anyMatch(a -> added.contains(a.id));
+                if (fresh) links++;
+            }
+        }
+        var alert = com.linkeddesk.alerts.Alerts.compose(hits, links);
+        var shown = new com.linkeddesk.alerts.Alerts(AppPaths.home(), display)
+                .deliver(alert, java.time.LocalTime.now(), settings.quietFrom(), settings.quietTo());
+        if (!alert.isEmpty()) Logs.run("notify", (shown == null ? "held for after quiet hours: " : "shown: ") + alert.title(), alert.text(), 0);
+        return shown;
+    }
+
+    /** Shows notifications held during quiet hours, once they're over (the window checks every few minutes). */
+    public com.linkeddesk.alerts.Alerts.Alert flushHeldAlerts(com.linkeddesk.alerts.Alerts.Display display) throws IOException {
+        settings.reload();
+        var al = new com.linkeddesk.alerts.Alerts(AppPaths.home(), display);
+        if (al.held().isEmpty()) return null;
+        var shown = al.deliver(new com.linkeddesk.alerts.Alerts.Alert("", "", 0), java.time.LocalTime.now(), settings.quietFrom(), settings.quietTo());
+        if (shown != null) Logs.run("notify", "shown after quiet hours: " + shown.title(), shown.text(), 0);
+        return shown;
+    }
+
+    /** Emails today's briefing (once a day, after the daily download; {@code now} = send now anyway, e.g. a test). */
+    public String emailBriefing(boolean now) throws Exception {
+        settings.reload();
+        if (!now && !settings.emailEnabled()) return "Email: off.";
+        String today = java.time.LocalDate.now().toString();
+        if (!now && today.equals(settings.emailLastSent())) return "Email: already sent today.";
+        com.linkeddesk.analysis.Briefing b = briefing();
+        if (b.isEmpty() && !now) return "Email: nothing new in the last 24 hours, not sent.";
+        var mail = com.linkeddesk.alerts.EmailDigest.build(b, todaysDigest(), regions());
+        var to = com.linkeddesk.alerts.Mailer.Config.list(settings.emailTo());
+        var cfg = new com.linkeddesk.alerts.Mailer.Config(settings.smtpHost(), settings.smtpPort(), settings.smtpSecurity(), settings.smtpUser(),
+                settings.smtpPassword(), settings.emailFrom(), to);
+        try {
+            mailer.send(cfg, mail.subject(), mail.text(), mail.html());
+        } catch (IOException e) {
+            Logs.run("email", "failed: " + e.getMessage(), String.join("\n", mailer.transcript()), 0);
+            throw e;
+        }
+        settings.reload();
+        settings.setEmailLastSent(today);
+        settings.save();
+        String done = "Briefing emailed to " + String.join(", ", to) + ".";
+        Logs.run("email", done, mail.subject(), 0);
+        return done;
     }
 }

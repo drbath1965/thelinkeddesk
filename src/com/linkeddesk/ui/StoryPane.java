@@ -114,6 +114,18 @@ final class StoryPane extends JScrollPane {
             } catch (Exception ex) {
                 JOptionPane.showMessageDialog(this, "Could not save: " + ex.getMessage());
             }
+        } else if (href.startsWith("mute:")) {
+            String outlet = java.net.URLDecoder.decode(href.substring(5), java.nio.charset.StandardCharsets.UTF_8);
+            if (JOptionPane.showConfirmDialog(this, "<html>Mute <b>" + Html.esc(outlet) + "</b>?<br><br>Its articles disappear from your lists, the briefing and search,<br>"
+                    + "but stay in the archive. Undo any time in Tools &gt; Sources.</html>", "Mute outlet", JOptionPane.OK_CANCEL_OPTION) == JOptionPane.OK_OPTION) {
+                try {
+                    host.service().sources().set(outlet, true, 1);
+                    host.status("Muted " + outlet + ". Tools > Sources lists your muted outlets.");
+                    host.articlesChanged();
+                } catch (Exception ex) { JOptionPane.showMessageDialog(this, "Could not save: " + ex.getMessage()); }
+            }
+        } else if (href.equals("watch:") && current != null) {
+            host.addWatch(watchWords(current));
         } else if (href.equals("desk:") && current != null) {
             DeskDialog d = new DeskDialog(SwingUtilities.getWindowAncestor(this), current);
             d.setVisible(true);
@@ -122,6 +134,13 @@ final class StoryPane extends JScrollPane {
             try { Desktop.getDesktop().browse(URI.create(href)); }
             catch (Exception ex) { JOptionPane.showMessageDialog(this, "Could not open the link: " + ex.getMessage()); }
         }
+    }
+
+    /** Words to start a watch with: the story's leading key term (quoted if it's a phrase). */
+    static String watchWords(StoryCluster c) {
+        if (c.keyTerms.isEmpty()) return "";
+        String t = c.keyTerms.get(0);
+        return t.contains(" ") ? "\"" + t + "\"" : t;
     }
 
     private java.util.Optional<StoryLink> link(String toId) {

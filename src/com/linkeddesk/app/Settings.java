@@ -99,6 +99,20 @@ public final class Settings {
         }
     }
 
+    /** The email password, encrypted the same way as the API key. */
+    public synchronized String smtpPassword() {
+        String enc = p.getProperty("smtpPassword.enc", "");
+        if (enc.isEmpty()) return "";
+        try { return secrets.unprotect(enc); }
+        catch (Exception e) { Logs.error("Could not decrypt the saved email password", e); return ""; }
+    }
+
+    public synchronized void setSmtpPassword(String pw) {
+        if (pw == null || pw.isEmpty()) { p.remove("smtpPassword.enc"); return; }
+        try { p.setProperty("smtpPassword.enc", secrets.protect(pw)); }
+        catch (Exception e) { throw new IllegalStateException("The email password couldn't be encrypted, so it wasn't saved: " + e.getMessage(), e); }
+    }
+
     public synchronized boolean hasApiKey() {
         return !p.getProperty("anthropicApiKey", "").isBlank() || !p.getProperty("anthropicApiKey.enc", "").isBlank();
     }
@@ -133,6 +147,49 @@ public final class Settings {
     private double dbl(String key, double def) {
         try { return Double.parseDouble(p.getProperty(key, Double.toString(def)).trim()); }
         catch (NumberFormatException e) { return def; }
+    }
+
+    /** Notifications for new watchlist matches after a download. */
+    public synchronized boolean notifications() { return Boolean.parseBoolean(p.getProperty("notifications", "true")); }
+    public synchronized void setNotifications(boolean b) { p.setProperty("notifications", Boolean.toString(b)); }
+
+    /** Also notify about new links between desks. */
+    public synchronized boolean notifyLinks() { return Boolean.parseBoolean(p.getProperty("notifyLinks", "false")); }
+    public synchronized void setNotifyLinks(boolean b) { p.setProperty("notifyLinks", Boolean.toString(b)); }
+
+    /** Quiet hours (no pop-ups), e.g. 22:00-07:00; null when not set. */
+    public synchronized LocalTime quietFrom() { return time("quietFrom"); }
+    public synchronized LocalTime quietTo() { return time("quietTo"); }
+    public synchronized void setQuietHours(LocalTime from, LocalTime to) {
+        if (from == null || to == null) { p.remove("quietFrom"); p.remove("quietTo"); return; }
+        p.setProperty("quietFrom", from.toString());
+        p.setProperty("quietTo", to.toString());
+    }
+
+    private LocalTime time(String key) {
+        try { String v = p.getProperty(key); return v == null || v.isBlank() ? null : LocalTime.parse(v.trim()); }
+        catch (RuntimeException e) { return null; }
+    }
+
+    // ---- email digest (ALR-F04)
+    public synchronized boolean emailEnabled() { return Boolean.parseBoolean(p.getProperty("emailEnabled", "false")); }
+    public synchronized void setEmailEnabled(boolean b) { p.setProperty("emailEnabled", Boolean.toString(b)); }
+    public synchronized String smtpHost() { return p.getProperty("smtpHost", "").trim(); }
+    public synchronized int smtpPort() { try { return Integer.parseInt(p.getProperty("smtpPort", "587").trim()); } catch (NumberFormatException e) { return 587; } }
+    /** STARTTLS, SSL or NONE. */
+    public synchronized String smtpSecurity() { return p.getProperty("smtpSecurity", "STARTTLS").trim(); }
+    public synchronized String smtpUser() { return p.getProperty("smtpUser", "").trim(); }
+    public synchronized String emailFrom() { return p.getProperty("emailFrom", "").trim(); }
+    public synchronized String emailTo() { return p.getProperty("emailTo", "").trim(); }
+    public synchronized String emailLastSent() { return p.getProperty("emailLastSent", "").trim(); }
+    public synchronized void setEmailLastSent(String day) { p.setProperty("emailLastSent", day); }
+    public synchronized void setSmtp(String host, int port, String security, String user, String from, String to) {
+        p.setProperty("smtpHost", host.trim());
+        p.setProperty("smtpPort", Integer.toString(port));
+        p.setProperty("smtpSecurity", security);
+        p.setProperty("smtpUser", user.trim());
+        p.setProperty("emailFrom", from.trim());
+        p.setProperty("emailTo", to.trim());
     }
 
     /** Show the briefing when the app opens and after each daily download. */

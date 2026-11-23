@@ -27,7 +27,10 @@ public record Briefing(long now, Map<Category, List<Ranked>> desks, List<StoryLi
     public record Ranked(StoryCluster story, double score, int last24h, int last6h) {}
 
     /** Builds the briefing from an analysis that covers at least the last two days. */
-    public static Briefing build(Analyzer.Result r, long now) {
+    public static Briefing build(Analyzer.Result r, long now) { return build(r, now, StoryCluster::sourceCount); }
+
+    /** {@code coverage}: how many outlets a story counts as (your source weights, ALR-F03). */
+    public static Briefing build(Analyzer.Result r, long now, java.util.function.ToDoubleFunction<StoryCluster> coverage) {
         long since = now - DAY, recent = now - 6 * 3600_000L;
         Map<Category, List<Ranked>> desks = new EnumMap<>(Category.class);
         for (Category c : Category.values()) desks.put(c, new ArrayList<>());
@@ -44,7 +47,7 @@ public record Briefing(long now, Map<Category, List<Ranked>> desks, List<StoryLi
             if (d == 0) continue;
             stories++;
             articles += d;
-            double score = s.sourceCount() + 0.5 * d + 0.5 * h6;
+            double score = coverage.applyAsDouble(s) + 0.5 * d + 0.5 * h6;
             Ranked rk = new Ranked(s, score, d, h6);
             desks.get(s.category).add(rk);
             if (s.also != null) desks.get(s.also).add(rk);

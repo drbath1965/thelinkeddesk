@@ -82,9 +82,15 @@ public final class MainWindow extends JFrame implements Host {
     private final JLabel status = new JLabel(" ");
     private final JProgressBar busy = new JProgressBar();
     private FeedHealthDialog healthDialog;
+    private final WatchPanel watchPanel;
+    private final MarketsPanel markets;
+    private com.linkeddesk.alerts.Tray tray;
+    /** Which watches each story in the current view matches (worked out after each analysis). */
+    private volatile java.util.Map<StoryCluster, List<com.linkeddesk.alerts.Watches.Watch>> watchHits = java.util.Map.of();
+    private volatile com.linkeddesk.alerts.Watches watchRef;
 
     public MainWindow(NewsService service) {
-        super("The Linked Desk 1.4 — world news, linked");
+        super("The Linked Desk 1.5 — world news, linked");
         this.service = service;
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         // Fit the screen (also at 150-200% Windows scaling, where the usable area in Java pixels is smaller).
@@ -101,6 +107,8 @@ public final class MainWindow extends JFrame implements Host {
         map = new MapPanel(this);
         world = new WorldPanel(this);
         askPanel = new AskPanel(this);
+        watchPanel = new WatchPanel(this);
+        markets = new MarketsPanel(this);
         threadTimeline.onOpen = c -> openStory(c.id);
         lineTimeline.onOpen = c -> openStory(c.id);
 
@@ -169,11 +177,13 @@ public final class MainWindow extends JFrame implements Host {
         tabs.addTab("Briefing", briefing);
         tabs.addTab("Stories", stories);
         tabs.addTab("Saved", saved);
+        tabs.addTab("Watchlist", watchPanel);
         tabs.addTab("Storylines", lineSplit);
         tabs.addTab("Threads", threadSplit);
         tabs.addTab("Map", map);
         tabs.addTab("World", world);
         tabs.addTab("Ask", askPanel);
+        tabs.addTab("Markets", markets);
         tabs.addTab("Topics", topics);
         tabs.addTab("Search", search);
 
@@ -227,6 +237,8 @@ public final class MainWindow extends JFrame implements Host {
         JMenu view = new JMenu("View");
         view.add(item("Briefing", 0, e -> tabs.setSelectedComponent(briefing)));
         view.add(item("Saved stories", 0, e -> tabs.setSelectedComponent(saved)));
+        view.add(item("Watchlist", 0, e -> tabs.setSelectedComponent(watchPanel)));
+        view.add(item("Markets", 0, e -> tabs.setSelectedComponent(markets)));
         view.add(item("Connection map", 0, e -> tabs.setSelectedComponent(map)));
         view.add(item("World map", 0, e -> tabs.setSelectedComponent(world)));
         view.add(item("Ask about the news", 0, e -> { tabs.setSelectedComponent(askPanel); askPanel.focusQuestion(); }));
@@ -235,6 +247,8 @@ public final class MainWindow extends JFrame implements Host {
         view.add(item("Last download report", 0, e -> showReport()));
         JMenu tools = new JMenu("Tools");
         tools.add(item("Settings…", 0, e -> openSettings()));
+        tools.add(item("Sources (mute or weight outlets)…", 0, e -> openSources()));
+        tools.add(item("Watch a subject…", 0, e -> addWatch("")));
         tools.addSeparator();
         tools.add(item("Calibrate linking…", 0, e -> new CalibrationDialog(this, this).setVisible(true)));
         tools.add(item("Words behind links…", 0, e -> openWords()));
@@ -266,12 +280,21 @@ public final class MainWindow extends JFrame implements Host {
                 else tabs.setSelectedComponent(stories);
                 briefing.reload();
                 reloadSaved();
+                watchPanel.reload();
+                markets.reload();
+                installTray();
                 analyze(() -> {
                     if (service.settings().fetchOnStart() && DailyScheduler.isStale(service.settings())) fetchDaily();
                 });
             }
         }.execute();
         new DailyScheduler(service.settings(), () -> SwingUtilities.invokeLater(this::fetchDaily)).start();
+        // Notifications held during quiet hours are shown once they end.
+        Timer held = new Timer(5 * 60_000, e -> {
+            if (tray == null) return;
+            new Thread(() -> { try { service.flushHeldAlerts(tray); } catch (Exception ignored) { } }, "held-alerts").start();
+        });
+        held.start();
     }
 
     public void bringToFront() {
@@ -400,6 +423,9 @@ public final class MainWindow extends JFrame implements Host {
             reloadSaved();
             if (daily && service.settings().showBriefing()) tabs.setSelectedComponent(briefing);
             if (daily) runDailyClaude();
+            watchPanel.reload();
+            markets.reload();
+            afterDownload(r, daily);
         });
     }
 
@@ -444,6 +470,7 @@ public final class MainWindow extends JFrame implements Host {
                 try {
                     result = get();
                     refreshLists(selected);
+                    watchesChanged();          // watch marks follow a moment later
                 } catch (Exception ex) {
                     status.setText("Analysis failed: " + rootMessage(ex));
                 }
@@ -494,7 +521,7 @@ public final class MainWindow extends JFrame implements Host {
             case NEWEST -> Comparator.comparingLong((StoryCluster c) -> c.lastSeen).reversed();
             case LINKED -> Comparator.comparingInt((StoryCluster c) -> c.links.size()).reversed()
                     .thenComparing(Comparator.comparingInt(StoryCluster::sourceCount).reversed());
-            case COVERED -> Comparator.comparingInt(StoryCluster::sourceCount).reversed()
+            case COVERED -> Comparator.comparingDouble((StoryCluster c) -> service.sources().coverage(c)).reversed()
                     .thenComparing(Comparator.comparingLong((StoryCluster c) -> c.lastSeen).reversed());
         };
         list.sort(cmp);
@@ -568,8 +595,112 @@ public final class MainWindow extends JFrame implements Host {
         healthDialog.toFront();
     }
 
+    private void openSources() {
+        SourcesDialog d = new SourcesDialog(this, this);
+        d.setVisible(true);
+        if (d.changed()) { analyze(null); briefing.reload(); search.refresh(); }
+    }
+
+    // ------------------------------------------------------------------ watchlist, tray, email (P5)
+
+    @Override public List<String> watchesFor(StoryCluster c) {
+        List<com.linkeddesk.alerts.Watches.Watch> w = watchHits.get(c);
+        if (w == null) return List.of();
+        List<String> out = new ArrayList<>();
+        for (var x : w) out.add(x.name());
+        return out;
+    }
+
+    @Override public boolean newForWatch(StoryCluster c) {
+        List<com.linkeddesk.alerts.Watches.Watch> w = watchHits.get(c);
+        if (w == null) return false;
+        var ws = watchRef;
+        if (ws == null) return false;
+        for (var x : w) { long seen = ws.lastSeen(x.name()); if (seen > 0 && WatchPanel.newSince(c, seen)) return true; }
+        return false;
+    }
+
+    @Override public void watchesChanged() {
+        List<StoryCluster> now = result.stories();
+        new SwingWorker<java.util.Map<StoryCluster, List<com.linkeddesk.alerts.Watches.Watch>>, Void>() {
+            @Override protected java.util.Map<StoryCluster, List<com.linkeddesk.alerts.Watches.Watch>> doInBackground() {
+                watchRef = service.watches();
+                return watchRef.stories(now);
+            }
+            @Override protected void done() {
+                try { watchHits = get(); } catch (Exception ignored) { }
+                stories.refreshRows();
+                saved.refreshRows();
+                updateWatchTab();
+            }
+        }.execute();
+    }
+
+    @Override public void addWatch(String words) {
+        tabs.setSelectedComponent(watchPanel);
+        watchPanel.addWatch(words);
+    }
+
+    private void updateWatchTab() {
+        int i = tabs.indexOfComponent(watchPanel);
+        int n = watchPanel.newTotal();
+        if (i >= 0) tabs.setTitleAt(i, n > 0 ? "Watchlist (" + n + ")" : "Watchlist");
+    }
+
+    /** The tray icon: click to open the watchlist; right-click for Open / Download now / Watchlist. */
+    private void installTray() {
+        if (!com.linkeddesk.alerts.Tray.supported()) return;
+        Runnable open = () -> SwingUtilities.invokeLater(() -> {
+            setExtendedState(getExtendedState() & ~ICONIFIED);
+            setVisible(true);
+            toFront();
+            tabs.setSelectedComponent(watchPanel);
+        });
+        tray = new com.linkeddesk.alerts.Tray(open);
+        PopupMenu menu = new PopupMenu();
+        MenuItem o = new MenuItem("Open The Linked Desk");
+        o.addActionListener(e -> SwingUtilities.invokeLater(() -> { setExtendedState(getExtendedState() & ~ICONIFIED); toFront(); }));
+        MenuItem d = new MenuItem("Download news now");
+        d.addActionListener(e -> SwingUtilities.invokeLater(this::fetch));
+        MenuItem w = new MenuItem("Watchlist");
+        w.addActionListener(e -> open.run());
+        menu.add(o); menu.add(d); menu.add(w);
+        if (!tray.install(menu)) tray = null;
+    }
+
+    /** After a download: one grouped notification for new watchlist matches; after the daily one, the email. */
+    private void afterDownload(Object r, boolean daily) {
+        if (!(r instanceof FetchReport fr)) return;
+        com.linkeddesk.alerts.Alerts.Display display = tray != null ? tray : (title, text) -> {
+            SwingUtilities.invokeLater(() -> status.setText(title + ": " + text.replace('\n', ' ')));
+            return true;
+        };
+        new SwingWorker<String, Void>() {
+            @Override protected String doInBackground() throws Exception {
+                StringBuilder out = new StringBuilder();
+                try {
+                    var a = service.notifyAfterDownload(fr, display);
+                    if (a != null && !a.isEmpty()) out.append(a.title()).append(". ");
+                } catch (Exception ex) { com.linkeddesk.app.Logs.error("Notification after download", ex); }
+                if (daily) {
+                    try {
+                        String m = service.emailBriefing(false);
+                        if (!m.startsWith("Email: off")) out.append(m);
+                    } catch (Exception ex) {
+                        out.append("The briefing email wasn't sent: ").append(ex.getMessage()).append(" (View > Logs).");
+                    }
+                }
+                return out.toString().strip();
+            }
+            @Override protected void done() {
+                try { String m = get(); if (!m.isEmpty()) status.setText(m); } catch (Exception ignored) { }
+            }
+        }.execute();
+    }
+
     private void openSettings() {
         SettingsDialog d = new SettingsDialog(this, service.settings());
+        d.testEmail = () -> service.emailBriefing(true);
         d.setVisible(true);
         if (d.wasSaved()) stories.refreshDetail();
         if (d.lookChanged()) {
@@ -580,6 +711,8 @@ public final class MainWindow extends JFrame implements Host {
             map.refreshPage();
             world.refreshPage();
             askPanel.refreshPage();
+            watchPanel.refreshPage();
+            markets.refreshPage();
             refreshLists(null);
         }
     }
@@ -606,6 +739,7 @@ public final class MainWindow extends JFrame implements Host {
             {"M", "Open the connection map"},
             {"W", "Open the world map"},
             {"A", "Ask Claude about your news"},
+            {"L", "Open your watchlist"},
             {"?", "Show these shortcuts"},
             {"Ctrl+D / Ctrl+F / Ctrl+L", "Download / Search all news / Logs"},
     };
@@ -643,6 +777,7 @@ public final class MainWindow extends JFrame implements Host {
             case 'm' -> tabs.setSelectedComponent(map);
             case 'w' -> tabs.setSelectedComponent(world);
             case 'a' -> { tabs.setSelectedComponent(askPanel); askPanel.focusQuestion(); }
+            case 'l' -> tabs.setSelectedComponent(watchPanel);
             case '?' -> showShortcuts();
             default -> { return false; }
         }

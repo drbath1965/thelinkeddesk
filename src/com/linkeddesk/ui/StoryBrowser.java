@@ -30,7 +30,7 @@ final class StoryBrowser extends JSplitPane {
         pane.openStory = this::select;
         pane.lookup = byId::get;
         pane.stateChanged = list::repaint;
-        list.setCellRenderer(new StoryRenderer(host));
+        list.setCellRenderer(new StoryRenderer(host, this));
         list.addMouseListener(new java.awt.event.MouseAdapter() {
             @Override public void mousePressed(java.awt.event.MouseEvent e) { userPick = true; }
         });
@@ -63,6 +63,18 @@ final class StoryBrowser extends JSplitPane {
     }
 
     void setHighlight(SearchQuery q) { pane.setHighlight(q); }
+
+    private java.util.function.Function<StoryCluster, String> tags;
+    private boolean tagHighlight;
+
+    /**
+     * Puts a small label above some stories (null for none): "new" in a watch, the day in Markets. With highlight the
+     * row is also tinted. Without a tag function, stories new on your watchlist are tagged.
+     */
+    /** Re-measures every row (when what a row shows changed, e.g. watch marks arrived). */
+    void refreshRows() { list.setFixedCellHeight(10); list.setFixedCellHeight(-1); list.revalidate(); list.repaint(); }
+
+    void setTags(java.util.function.Function<StoryCluster, String> tags, boolean highlight) { this.tags = tags; tagHighlight = highlight; refreshRows(); }
 
     StoryCluster selected() { return list.getSelectedValue(); }
     int storyCount() { return model.size(); }
@@ -97,7 +109,8 @@ final class StoryBrowser extends JSplitPane {
     /** List row: desk colour bar, headline, desk · sources · age · links. */
     static final class StoryRenderer extends DefaultListCellRenderer {
         private final Host host;
-        StoryRenderer(Host host) { this.host = host; }
+        private final StoryBrowser owner;
+        StoryRenderer(Host host, StoryBrowser owner) { this.host = host; this.owner = owner; }
 
         @Override public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean sel, boolean focus) {
             super.getListCellRendererComponent(list, value, index, sel, focus);
@@ -112,13 +125,22 @@ final class StoryBrowser extends JSplitPane {
             var sp = host.service().regions().spread(c);
             String meta = meta0 + (c.continues != null || !c.continuedBy.isEmpty() ? " · storyline" : "")
                     + (sp.singleSource() ? " · single source" : sp.regionCount() >= 2 ? " · " + sp.regionCount() + " regions" : "");
+            java.util.List<String> watching = host.watchesFor(c);
+            if (!watching.isEmpty()) meta += " · watching: " + String.join(", ", watching);
             boolean unread = reads.isUnread(c);
+            String tag = owner.tags != null ? owner.tags.apply(c) : host.newForWatch(c) ? "new on your watchlist" : null;
+            boolean tint = tag != null && (owner.tags == null || owner.tagHighlight);
             String star = reads.isStarred(c) ? "<span style='color:" + (sel ? "#ffffff" : Theme.star()) + "'>★</span> " : "";
             String dot = unread ? "<span style='color:" + (sel ? "#ffffff" : Theme.link()) + "'>●</span> " : "";
             String head = unread ? dot + "<b>" + Html.esc(c.headline) + "</b>" : "<span style='color:" + (sel ? "#ffffff" : Theme.read()) + "'>" + Html.esc(c.headline) + "</span>";
             if (unread && reads.hasNewSinceRead(c)) head += " <span style='color:" + (sel ? "#ffffff" : Theme.link()) + "'>· new</span>";
             setText("<html><div style='width:" + Html.cssPx(w) + "px'>" + star + head + "<br>"
                     + "<span style='color:" + (sel ? "#ffffff" : Theme.muted()) + "'>" + Html.esc(meta) + "</span></div></html>");
+            if (tag != null) {
+                String bg = tint ? Theme.warn() : Theme.muted();
+                setText(getText().replace("<div style=", "<div><span style='color:#ffffff;background:" + bg + "'>&nbsp;" + Html.esc(tag) + "&nbsp;</span><br><div style=") + "</div>");
+                if (tint && !sel) setBackground(Theme.c(Theme.here()));
+            }
             setBorder(BorderFactory.createCompoundBorder(
                     BorderFactory.createMatteBorder(0, 6, 1, 0, Theme.desk(c.category)),
                     BorderFactory.createEmptyBorder(6, 8, 6, 6)));

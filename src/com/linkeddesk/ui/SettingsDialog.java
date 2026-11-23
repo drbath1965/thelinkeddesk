@@ -27,6 +27,18 @@ final class SettingsDialog extends JDialog {
     private final JSpinner checkLinks = new JSpinner(new SpinnerNumberModel(10, 0, 50, 1));
     private final JTextField priceIn = new JTextField(5), priceOut = new JTextField(5);
     private boolean saved;
+    // Alerts (P5)
+    private final JCheckBox notifications = new JCheckBox("Show a Windows notification when new articles match your watchlist");
+    private final JCheckBox notifyLinks = new JCheckBox("Also notify about new links between desks");
+    private final JCheckBox quiet = new JCheckBox("Quiet hours, no pop-ups from");
+    private final JTextField quietFrom = new JTextField(5), quietTo = new JTextField(5);
+    private final JCheckBox email = new JCheckBox("Email me the briefing once a day, after the daily download");
+    private final JTextField smtpHost = new JTextField(20), smtpUser = new JTextField(22), emailFrom = new JTextField(22), emailTo = new JTextField(30);
+    private final JTextField smtpPort = new JTextField(5);
+    private final JComboBox<String> smtpSecurity = new JComboBox<>(new String[]{"STARTTLS", "SSL", "NONE"});
+    private final JPasswordField smtpPassword = new JPasswordField(22);
+    /** Sends the briefing now with the email settings as saved (set by the main window); returns what happened. */
+    java.util.concurrent.Callable<String> testEmail;
 
     SettingsDialog(Frame owner, Settings settings) {
         super(owner, "Settings", true);
@@ -45,6 +57,25 @@ final class SettingsDialog extends JDialog {
         checkLinks.setValue(settings.claudeCheckLinks());
         priceIn.setText(settings.priceIn() > 0 ? Double.toString(settings.priceIn()) : "");
         priceOut.setText(settings.priceOut() > 0 ? Double.toString(settings.priceOut()) : "");
+
+        notifications.setSelected(settings.notifications());
+        notifyLinks.setSelected(settings.notifyLinks());
+        quiet.setSelected(settings.quietFrom() != null);
+        quietFrom.setText(settings.quietFrom() == null ? "22:00" : settings.quietFrom().toString());
+        quietTo.setText(settings.quietTo() == null ? "07:00" : settings.quietTo().toString());
+        email.setSelected(settings.emailEnabled());
+        smtpHost.setText(settings.smtpHost());
+        smtpPort.setText(Integer.toString(settings.smtpPort()));
+        smtpSecurity.setSelectedItem(settings.smtpSecurity().toUpperCase(java.util.Locale.ROOT));
+        smtpUser.setText(settings.smtpUser());
+        smtpPassword.setText(settings.smtpPassword());
+        emailFrom.setText(settings.emailFrom());
+        emailTo.setText(settings.emailTo());
+        smtpSecurity.addActionListener(e -> {
+            String p = smtpPort.getText().trim();
+            if (p.equals("587") || p.equals("465") || p.equals("25") || p.isEmpty())
+                smtpPort.setText(switch ((String) smtpSecurity.getSelectedItem()) { case "SSL" -> "465"; case "NONE" -> "25"; default -> "587"; });
+        });
 
         JPanel form = new JPanel(new GridBagLayout());
         form.setBorder(BorderFactory.createEmptyBorder(14, 14, 6, 14));
@@ -82,6 +113,34 @@ final class SettingsDialog extends JDialog {
         g.gridwidth = 2;
         form.add(briefing, g); g.gridy++;
         form.add(note("Text size adds to Windows' own display scaling (Settings > Display > Scale), which the app follows."), g); g.gridy++;
+
+        form.add(section("Notifications"), g); g.gridy++;
+        form.add(notifications, g); g.gridy++;
+        form.add(notifyLinks, g); g.gridy++;
+        JPanel q = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        q.add(quiet); q.add(quietFrom); q.add(new JLabel("  to  ")); q.add(quietTo);
+        form.add(q, g); g.gridy++;
+        form.add(note("One notification per download, grouped by watch. During quiet hours nothing pops up; what arrived is "
+                + "shown together once quiet hours end. Notifications also come from the daily Windows task when the app is closed."), g); g.gridy++;
+
+        form.add(section("Email digest"), g); g.gridy++;
+        form.add(email, g); g.gridy++;
+        g.gridwidth = 1;
+        form.add(new JLabel("Mail server (SMTP):"), g); g.gridx = 1;
+        JPanel hostRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        hostRow.add(smtpHost); hostRow.add(new JLabel("  port ")); hostRow.add(smtpPort); hostRow.add(new JLabel("  ")); hostRow.add(smtpSecurity);
+        form.add(hostRow, g); g.gridx = 0; g.gridy++;
+        form.add(new JLabel("User name:"), g); g.gridx = 1; form.add(smtpUser, g); g.gridx = 0; g.gridy++;
+        form.add(new JLabel("Password:"), g); g.gridx = 1; form.add(smtpPassword, g); g.gridx = 0; g.gridy++;
+        form.add(new JLabel("From:"), g); g.gridx = 1; form.add(emailFrom, g); g.gridx = 0; g.gridy++;
+        form.add(new JLabel("To (commas between):"), g); g.gridx = 1; form.add(emailTo, g); g.gridx = 0; g.gridy++;
+        g.gridwidth = 2;
+        JButton test = new JButton("Send test email now");
+        test.addActionListener(e -> sendTest(test));
+        form.add(test, g); g.gridy++;
+        form.add(note("Gmail: smtp.gmail.com, port 587, STARTTLS, your Gmail address as user name and an app password "
+                + "(Google Account > Security > App passwords), not your normal password. Outlook.com: smtp-mail.outlook.com, 587, STARTTLS. "
+                + "The password is stored encrypted like the API key."), g); g.gridy++;
 
         form.add(section("News sources"), g); g.gridy++;
         JPanel feeds = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
@@ -196,11 +255,74 @@ final class SettingsDialog extends JDialog {
             JOptionPane.showMessageDialog(this, "Enter the budget and prices as numbers, for example 5.00.", "Settings", JOptionPane.WARNING_MESSAGE);
             return;
         }
+        if (!applyAlerts()) return;
         settings.setClaudeDigest(digest.isSelected());
         settings.setClaudeCheckLinks((Integer) checkLinks.getValue());
         settings.save();
         saved = true;
         dispose();
+    }
+
+    /** Copies the notification and email fields into the settings; false (with a message) if one is invalid. */
+    private boolean applyAlerts() {
+        settings.setNotifications(notifications.isSelected());
+        settings.setNotifyLinks(notifyLinks.isSelected());
+        if (quiet.isSelected()) {
+            LocalTime f = parse(quietFrom.getText()), t = parse(quietTo.getText());
+            if (f == null || t == null) {
+                JOptionPane.showMessageDialog(this, "Enter quiet hours as HH:MM, for example 22:00 to 07:00.", "Settings", JOptionPane.WARNING_MESSAGE);
+                return false;
+            }
+            settings.setQuietHours(f, t);
+        } else settings.setQuietHours(null, null);
+        int port;
+        try { port = Integer.parseInt(smtpPort.getText().trim()); if (port < 1 || port > 65535) throw new NumberFormatException(); }
+        catch (NumberFormatException ex) { JOptionPane.showMessageDialog(this, "Enter the mail server port as a number, usually 587.", "Settings", JOptionPane.WARNING_MESSAGE); return false; }
+        if (email.isSelected() && (smtpHost.getText().isBlank() || emailTo.getText().isBlank())) {
+            JOptionPane.showMessageDialog(this, "To email the briefing, enter the mail server and who to send it to.", "Settings", JOptionPane.WARNING_MESSAGE);
+            return false;
+        }
+        settings.setEmailEnabled(email.isSelected());
+        settings.setSmtp(smtpHost.getText(), port, (String) smtpSecurity.getSelectedItem(), smtpUser.getText(),
+                emailFrom.getText().isBlank() ? smtpUser.getText() : emailFrom.getText(), emailTo.getText());
+        try {
+            String pw = new String(smtpPassword.getPassword());
+            if (!pw.equals(settings.smtpPassword())) settings.setSmtpPassword(pw);
+        } catch (IllegalStateException ex) {
+            JOptionPane.showMessageDialog(this, ex.getMessage(), "Settings", JOptionPane.ERROR_MESSAGE);
+            return false;
+        }
+        return true;
+    }
+
+    private static LocalTime parse(String s) {
+        try { s = s.trim(); return LocalTime.parse(s.length() == 4 ? "0" + s : s); } catch (DateTimeParseException e) { return null; }
+    }
+
+    private void sendTest(JButton button) {
+        if (testEmail == null) return;
+        if (smtpHost.getText().isBlank() || emailTo.getText().isBlank()) {
+            JOptionPane.showMessageDialog(this, "Enter the mail server and who to send it to first.");
+            return;
+        }
+        settings.reload();
+        if (!applyAlerts()) return;
+        settings.save();
+        button.setEnabled(false);
+        button.setText("Sending…");
+        new SwingWorker<String, Void>() {
+            @Override protected String doInBackground() throws Exception { return testEmail.call(); }
+            @Override protected void done() {
+                button.setEnabled(true);
+                button.setText("Send test email now");
+                try { JOptionPane.showMessageDialog(SettingsDialog.this, get() + "\nCheck the inbox (and the spam folder).", "Test email", JOptionPane.INFORMATION_MESSAGE); }
+                catch (Exception ex) {
+                    Throwable c = ex.getCause() == null ? ex : ex.getCause();
+                    JOptionPane.showMessageDialog(SettingsDialog.this, "The email wasn't sent:\n\n" + c.getMessage()
+                            + "\n\nView > Logs has the conversation with the mail server.", "Test email", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        }.execute();
     }
 
     private void installTask() {

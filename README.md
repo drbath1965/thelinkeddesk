@@ -1,11 +1,11 @@
-# The Linked Desk 1.4
+# The Linked Desk 1.5
 
 A Windows desktop app that downloads world news every day, keeps every article, groups reports of the same event into one story, and links related stories across World, Finance, Politics, Society & Climate, and Tech & Science. Follow your own topics and search everything you've ever downloaded.
 
 ## Run it
 **Easiest (no Java needed):** run `build-installer.bat` once on a PC with the JDK 21+, then use what it makes:
-- `dist\The Linked Desk-1.4.0.msi` if the WiX Toolset 3 is installed (Start-menu entry, desktop shortcut, uninstaller; installs for your user, no admin rights), or
-- `dist\TheLinkedDesk-1.4.0-windows.zip` otherwise: unzip anywhere and run `The Linked Desk.exe`.
+- `dist\The Linked Desk-1.5.0.msi` if the WiX Toolset 3 is installed (Start-menu entry, desktop shortcut, uninstaller; installs for your user, no admin rights), or
+- `dist\TheLinkedDesk-1.5.0-windows.zip` otherwise: unzip anywhere and run `The Linked Desk.exe`.
 
 **Or from the jar:** with Java 21+ installed, double-click **Run The Linked Desk.bat** (or `LinkedDesk.jar`).
 
@@ -15,6 +15,8 @@ Opening the app a second time just brings the open window to the front.
 - **Briefing** (opens first, and after each daily download; switch off in Settings): the top 5 stories of the last 24 hours in each desk, ranked by how many outlets cover them and how fast coverage is growing, plus links between desks that are new today and storylines that moved on. Click a story to read it beside the briefing.
 - **Stories**: each event once, with every outlet's coverage, linked stories and the shared names that link them. Filter by time window, desk, words, cross-desk links only, or **Unread only**. Unread stories are bold with a dot; a story you read shows "new" when fresh coverage joins it. Each story shows **how its coverage spreads over regions** ("13 outlets in 4 regions"), with a warning for a **single source** or **one region** only.
 - **Saved**: stories you starred (☆ Star on any story, or press S), as they stand now.
+- **Watchlist** (press L): subjects you follow across all desks, such as *Fed*, *"strait of hormuz" OR tankers* or *Lockheed -stock*. Names match their aliases too (a watch on *Fed* also finds *Federal Reserve*). Each watch shows how many stories are **new since you last looked**; matching stories are marked in **Stories** ("watching: Fed") and the new ones are tinted. Add one with **Watch this subject…** on any story or **Tools > Watch a subject…**.
+- **Markets**: tickers you follow (NVDA, LMT, BA…). Stories that name the company or its symbol (`$NVDA`, `(NVDA)`, `NASDAQ: NVDA`, *Nvidia*) are listed by day, and also shown on the **Finance** desk. Well-known symbols fill in their company names; add your own names for others.
 - **Storylines**: one event followed across days (day 1 "3 dead in factory fire", day 3 "death toll rises to 24"). Each story also shows **How this story developed**.
 - **Threads**: topics that recur across several linked stories, with a **timeline** (one lane per desk; click a marker to open the story). Storylines have the same timeline.
 - **Map**: the linked stories as a network of dots and lines, coloured by desk. Filter by desk or thread; drag, zoom, hover, click to read.
@@ -25,9 +27,12 @@ Opening the app a second time just brings the open window to the front.
 - **News > Feed health**: every feed's status, last success, failures in a row, new articles per day and last error. A feed failing 7 times in a row is paused and retried weekly. Retry, change address, remove, or **Test all feeds**.
 - **View > Logs**: every download in the last 30 days with per-feed detail, plus the error log.
 - **Correct the app** on any story: **✓ Right / ✗ Wrong** on each link (right links are always shown; wrong ones are hidden and the words behind them count less), **Not this story** on an article that was grouped wrongly, and **Move to another desk…** (this story, everything from an outlet, or every headline with a word; optionally shown in a second desk too).
+- **Tools > Sources**: every outlet with its article count. **Mute** one to hide it from Stories, the Briefing, Search and Ask (its articles stay in the archive; search `source:` still finds them), or give it a **weight** (0.25-5) so it counts more or less toward *Most covered*. **Mute this outlet** also sits under every article.
+- **Notifications** (Settings): after each download, one Windows notification groups the new matches by watch ("Fed 2 · Hormuz 1" and the first headline), from the window or from the daily task when the app is closed. Optional: new links between desks. **Quiet hours** (e.g. 22:00-07:00) hold them; they're shown together afterwards. Clicking the tray icon opens the Watchlist.
+- **Email digest** (Settings): the briefing by email once a day after the daily download, with headlines linking to the articles and a plain-text version. Any SMTP server (STARTTLS, SSL); the password is stored encrypted. For Gmail use smtp.gmail.com, port 587, STARTTLS and an **app password**. **Send test email now** tries it at once.
 - **Tools > Calibrate linking**: how well grouping and linking score on a labelled sample of real news and on your verdicts, and **Find best settings** per desk.
 - **Tools > Words behind links**: which words create the most links; add a too-generic one to the stop words in one click. **Tools > Your corrections** lists your verdicts, desk rules and word lists (all removable).
-- **Keyboard**: J/K next/previous story, / filter or search box, S star, U mark unread, F download, B briefing, M map, W world map, A ask, ? all shortcuts (Help menu).
+- **Keyboard**: J/K next/previous story, / filter or search box, S star, U mark unread, F download, B briefing, L watchlist, M map, W world map, A ask, ? all shortcuts (Help menu).
 - **Tools > Settings > Reading**: light or dark colours, text size 90-175% (on top of Windows' display scaling, which the app follows).
 - **Download news now** turns into **Cancel download** while running; articles already downloaded are kept.
 
@@ -47,15 +52,16 @@ Opening the app a second time just brings the open window to the front.
 - `data\articles-YYYY-MM.tsv` – every article ever downloaded (opens in Excel). Nothing is deleted or capped. `data\backup\` – weekly copy of the current month. `data\topic-hits.tsv` – which topic found which article.
 - `feed-health.tsv`, `settings.properties`, `logs\` (`fetch-YYYY-MM.log`, `errors.log`).
 - `claude-usage.tsv` (every Claude request and its cost), `claude-cache.tsv` (answers already paid for), `link-checks.tsv` (Claude's verdicts on links), `digests\YYYY-MM-DD.txt` (each day's digest).
+- `watchlist.txt` (*Name | search words | yes/no*), `watch-seen.tsv` (when you last opened each watch), `sources.txt` (*outlet = mute* or *outlet = 2*), `tickers.txt` (*SYMBOL = company names*), `pending-alerts.txt` (notifications held during quiet hours).
 - `data\read.txt` (what you've read), `data\starred.tsv` (your stars), `regions.txt` (where outlets are based; add your own).
 - How stories are linked (plain text, edit by hand if you like; changes apply straight away): `aliases.txt` (different names for one thing: *Federal Reserve = Fed*), `stopwords.txt` (words that never link stories), `link-feedback.tsv` (your Right/Wrong/Not this story verdicts), `desk-rules.tsv` (your desk moves), `calibration.properties` (thresholds per desk).
 - The archive survives crashes and power cuts: a line cut off mid-write is skipped and the file is repaired on the next save.
-- The Anthropic API key (optional, for "Ask Claude why") is stored **encrypted**: on Windows with your Windows account's protection (DPAPI).
+- The Anthropic API key (optional, for "Ask Claude why") and the email password are stored **encrypted**: on Windows with your Windows account's protection (DPAPI).
 
 ## Command line
 ```
 LinkedDesk.jar               open the window
-LinkedDesk.jar --fetch       download once and exit (used by the daily task)
+LinkedDesk.jar --fetch       download once, notify, email the briefing, and exit (used by the daily task)
 LinkedDesk.jar --summary     print stories, links and threads (--all for all history)
 LinkedDesk.jar --print-task  show what the daily task will run
 ```
