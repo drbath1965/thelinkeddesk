@@ -80,6 +80,48 @@ public final class WindowsTask {
         return run(List.of("schtasks", "/Delete", "/F", "/TN", TASK_NAME));
     }
 
+    /**
+     * When you start a newer LinkedDesk-&lt;version&gt;.jar (or the installed app) than the one the daily task runs,
+     * moves the task over to this copy at the same time of day. Returns what was done, or null if nothing needed doing.
+     */
+    public static String followThisCopy() {
+        if (!supported()) return null;
+        try {
+            String xml = run(List.of("schtasks", "/Query", "/TN", TASK_NAME, "/XML"));
+            Action now = currentAction();
+            if (!pointsElsewhere(xml, now)) return null;
+            LocalTime t = timeIn(xml);
+            if (t == null) return null;
+            install(t, now, userId(), "schtasks");
+            return "The daily download task now runs this copy (" + now.arguments().replace(" --fetch", "") + ").";
+        } catch (Exception e) {
+            return null;        // no task set up, or Windows refused: nothing to move
+        }
+    }
+
+    /** True if the task's command is not this copy of the app. */
+    static boolean pointsElsewhere(String xml, Action now) {
+        String args = tag(xml, "Arguments"), cmd = tag(xml, "Command");
+        if (args == null || cmd == null) return false;
+        return !unx(args).equals(now.arguments()) || !unx(cmd).equalsIgnoreCase(now.program());
+    }
+
+    /** The task's time of day, from its start boundary. */
+    static LocalTime timeIn(String xml) {
+        String sb = tag(xml, "StartBoundary");
+        if (sb == null || sb.indexOf('T') < 0) return null;
+        try { return LocalTime.parse(sb.substring(sb.indexOf('T') + 1, sb.indexOf('T') + 6)); } catch (RuntimeException e) { return null; }
+    }
+
+    private static String tag(String xml, String name) {
+        int a = xml.indexOf("<" + name + ">"), b = xml.indexOf("</" + name + ">");
+        return a < 0 || b < a ? null : xml.substring(a + name.length() + 2, b).trim();
+    }
+
+    private static String unx(String s) {
+        return s.replace("&quot;", "\"").replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&");
+    }
+
     /** Status of the task as Windows reports it: next run, last run and last result. */
     public static String query() throws Exception {
         return run(List.of("schtasks", "/Query", "/TN", TASK_NAME, "/V", "/FO", "LIST"));

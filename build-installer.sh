@@ -3,8 +3,10 @@
 set -e
 cd "$(dirname "$0")"
 ./build.sh --skip-tests
-rm -rf dist && mkdir -p dist/input && cp LinkedDesk.jar dist/input/
-jpackage --type app-image --name TheLinkedDesk --app-version 1.7.0 --input dist/input --main-jar LinkedDesk.jar \
+VER=$(sed -n 's/.*String VERSION = "\([^"]*\)".*/\1/p' src/com/linkeddesk/app/AppPaths.java)
+APPVER=$VER; case $VER in *.*.*) ;; *) APPVER=$VER.0 ;; esac
+rm -rf dist && mkdir -p dist/input && cp "LinkedDesk-$VER.jar" dist/input/
+jpackage --type app-image --name TheLinkedDesk --app-version "$APPVER" --input dist/input --main-jar "LinkedDesk-$VER.jar" \
   --main-class com.linkeddesk.app.App --java-options -Xmx2g \
   --add-modules java.base,java.desktop,java.net.http,java.xml,java.logging,jdk.crypto.ec,jdk.charsets,jdk.localedata,jdk.zipfs \
   --dest dist

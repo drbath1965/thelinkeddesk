@@ -38,6 +38,11 @@ public final class WindowsTaskTest {
         c.eq("true", text(d, "StartWhenAvailable"), "runs a missed download when the PC is back on");
         c.eq("true", text(d, "RunOnlyIfNetworkAvailable"), "waits for a network connection");
         c.eq("IgnoreNew", text(d, "MultipleInstancesPolicy"), "never two downloads at once");
+        // A newer LinkedDesk-<version>.jar: the task moves to it (same time of day).
+        String newJar = "C:\\Users\\David Bath\\R&D Apps\\TheLinkedDesk\\LinkedDesk-1.7.1.jar";
+        c.that(WindowsTask.pointsElsewhere(xml, WindowsTask.Action.forJar(javaw, newJar)), "a task set up from an older jar is noticed when a newer one runs");
+        c.that(!WindowsTask.pointsElsewhere(xml, WindowsTask.Action.forJar(javaw, jar)), "… and left alone when it already runs this copy");
+        c.eq(LocalTime.of(6, 30), WindowsTask.timeIn(xml), "it keeps the time of day you set");
         c.eq("false", text(d, "DisallowStartIfOnBatteries"), "runs on laptop battery too");
         c.eq("InteractiveToken", text(d, "LogonType"), "runs as you, no password stored");
         c.eq("DESKTOP-01\\David", text(d, "UserId"), "registered for the current Windows user");

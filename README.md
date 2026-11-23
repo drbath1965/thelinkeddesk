@@ -1,13 +1,13 @@
-# The Linked Desk 1.7
+# The Linked Desk 1.7.1
 
 A Windows desktop app that downloads world news every day, keeps every article, groups reports of the same event into one story, and links related stories across World, Finance, Politics, Society & Climate, and Tech & Science. Follow your own topics and search everything you've ever downloaded.
 
 ## Run it
 **Easiest (no Java needed):** run `build-installer.bat` once on a PC with the JDK 21+, then use what it makes:
-- `dist\The Linked Desk-1.7.0.msi` if the WiX Toolset 3 is installed (Start-menu entry, desktop shortcut, uninstaller; installs for your user, no admin rights), or
-- `dist\TheLinkedDesk-1.7.0-windows.zip` otherwise: unzip anywhere and run `The Linked Desk.exe`.
+- `dist\The Linked Desk-1.7.1.msi` if the WiX Toolset 3 is installed (Start-menu entry, desktop shortcut, uninstaller; installs for your user, no admin rights), or
+- `dist\TheLinkedDesk-1.7.1-windows.zip` otherwise: unzip anywhere and run `The Linked Desk.exe`.
 
-**Or from the jar:** with Java 21+ installed, double-click **Run The Linked Desk.bat** (or `LinkedDesk.jar`).
+**Or from the jar:** with Java 21+ installed, double-click **Run The Linked Desk.bat** (or `LinkedDesk-1.7.1.jar`). The jar's name carries the version; to update, put the new jar in the same folder: the .bat starts the newest one, and the daily download task moves to it the first time you open it.
 
 Opening the app a second time just brings the open window to the front.
 
@@ -69,12 +69,12 @@ Opening the app a second time just brings the open window to the front.
 
 ## Command line
 ```
-LinkedDesk.jar               open the window
-LinkedDesk.jar --fetch       download once, notify, email the briefing, compress old months, update the index, weekly backup, exit (the daily task)
-LinkedDesk.jar --summary     print stories, links and threads (--all for all history)
-LinkedDesk.jar --print-task  show what the daily task will run
-LinkedDesk.jar --report [YYYY-MM-DD] [file.docx|.html|.md]   weekly report for the week holding that day (default: last week)
-LinkedDesk.jar --backup      back up now to the folder chosen in Tools > Archive and backup
+LinkedDesk-<version>.jar               open the window
+LinkedDesk-<version>.jar --fetch       download once, notify, email the briefing, compress old months, update the index, weekly backup, exit (the daily task)
+LinkedDesk-<version>.jar --summary     print stories, links and threads (--all for all history)
+LinkedDesk-<version>.jar --print-task  show what the daily task will run
+LinkedDesk-<version>.jar --report [YYYY-MM-DD] [file.docx|.html|.md]   weekly report for the week holding that day (default: last week)
+LinkedDesk-<version>.jar --backup      back up now to the folder chosen in Tools > Archive and backup
 ```
 
 ## Build and test

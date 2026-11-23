@@ -290,6 +290,11 @@ public final class MainWindow extends JFrame implements Host {
                 markets.reload();
                 installTray();
                 indexInBackground();
+                // A newer LinkedDesk-<version>.jar: keep the daily task on this copy.
+                new Thread(() -> {
+                    String moved = com.linkeddesk.schedule.WindowsTask.followThisCopy();
+                    if (moved != null) { com.linkeddesk.app.Logs.run("task", moved, "", 0); SwingUtilities.invokeLater(() -> status.setText(moved)); }
+                }, "task-check").start();
                 analyze(() -> {
                     if (service.settings().fetchOnStart() && DailyScheduler.isStale(service.settings())) fetchDaily();
                 });
