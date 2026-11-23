@@ -58,16 +58,42 @@ public final class FeedParser {
         try { f.setFeature(feature, v); } catch (Exception ignored) { }
     }
 
+    /** Full text longer than this is cut (it's for reading and searching, not an archive of the web). */
+    static final int MAX_FULL_TEXT = 30_000;
+
     private static void collect(NodeList items, FeedSource feed, long fetchedAt, List<Article> out) {
         for (int i = 0; i < items.getLength(); i++) {
             Element e = (Element) items.item(i);
             String title = clean(child(e, "title"));
             String link = link(e);
-            if (title.isEmpty() || link.isEmpty()) continue;
-            String summary = clean(firstNonEmpty(child(e, "description"), child(e, "summary"),
-                    child(e, "encoded"), child(e, "content")));
+            Element enclosure = childEl(e, "enclosure");
+            String encType = enclosure == null ? "" : enclosure.getAttribute("type").toLowerCase(Locale.ROOT);
+            if (link.isEmpty() && enclosure != null) link = enclosure.getAttribute("url").trim();     // a podcast episode without a page
+            if (link.isEmpty()) continue;
+            String rawSummary = firstNonEmpty(child(e, "description"), child(e, "summary"), child(e, "encoded"), child(e, "content"));
+            Element media = childEl(e, "group");                                                        // YouTube: media:group/media:description
+            if (rawSummary.isBlank() && media != null) rawSummary = child(media, "description");
+            if (rawSummary.isBlank()) rawSummary = child(e, "subtitle");                                 // itunes:subtitle
+            String summary = clean(rawSummary);
+            // What kind of item: a video, a podcast episode, a social post, or an ordinary article (FET-F06).
+            String kind = "";
+            String lowLink = link.toLowerCase(Locale.ROOT);
+            if (!child(e, "videoId").isBlank() || lowLink.contains("youtube.com/watch") || lowLink.contains("youtube.com/shorts") || encType.startsWith("video/")) kind = "video";
+            else if (encType.startsWith("audio/") || !child(e, "duration").isBlank()) kind = "audio";
+            else if (title.isEmpty() || lowLink.contains("reddit.com/r/") || lowLink.contains("bsky.app/profile/") || lowLink.matches("https?://[^/]+/@[^/]+/\\d+.*")) kind = "post";
+            if (title.isEmpty()) {
+                // Social posts have no headline: use the start of the post.
+                if (summary.isEmpty()) continue;
+                title = firstSentence(summary, 110);
+                if (summary.equals(title)) summary = "";
+            }
+            if (kind.equals("post") && lowLink.contains("reddit.com/r/")) summary = summary.replaceFirst("\\s*submitted by .*$", "").trim();
+            // The full text, when the publisher puts it in the feed (content:encoded, Atom content) (FET-F07).
+            String full = paragraphs(firstNonEmpty(child(e, "encoded"), child(e, "content")));
+            if (full.length() > MAX_FULL_TEXT) full = full.substring(0, MAX_FULL_TEXT).trim() + "…";
             if (summary.length() > MAX_SUMMARY) summary = summary.substring(0, MAX_SUMMARY).trim() + "…";
             if (summary.equalsIgnoreCase(title)) summary = "";
+            if (full.length() < 600 || full.replaceAll("\\s+", " ").length() < summary.length() * 3 / 2) full = "";   // only when it really is more
             long published = parseDate(firstNonEmpty(child(e, "pubDate"), child(e, "published"),
                     child(e, "updated"), child(e, "date")), fetchedAt);
 
@@ -84,8 +110,43 @@ public final class FeedParser {
                 if (summary.startsWith(title)) summary = summary.substring(title.length()).replaceFirst("^\\s*[-–—]?\\s*" + Pattern.quote(source) + "\\s*$", "").trim();
                 link = unwrapRedirect(link);
             }
-            out.add(new Article(idFor(link), link, title, summary, source, feed.category(), published, fetchedAt));
+            out.add(new Article(idFor(link), link, title, summary, source, feed.category(), published, fetchedAt, kind, full));
         }
+    }
+
+    /** The first sentence (or the first {@code max} characters, cut at a word). */
+    static String firstSentence(String s, int max) {
+        java.util.regex.Matcher m = Pattern.compile("^(.{20,}?[.!?])(\\s|$)").matcher(s);
+        String t = m.find() && m.group(1).length() <= max ? m.group(1) : s;
+        if (t.length() <= max) return t;
+        int cut = t.lastIndexOf(' ', max - 1);
+        return t.substring(0, cut > max / 2 ? cut : max - 1).trim() + "…";
+    }
+
+    private static final Pattern BREAKS = Pattern.compile("(?i)<\\s*(/p|br\\s*/?|/h[1-6]|/li|/blockquote|/div)\\s*>");
+
+    /** Text with its paragraphs kept (blank line between them), tags and entities removed. */
+    public static String paragraphs(String html) {
+        if (html == null || html.isBlank()) return "";
+        String t = html.contains("&lt;") && !html.contains("<") ? unescape(html) : html;
+        t = t.replaceAll("(?is)<(script|style|figure|figcaption)[^>]*>.*?</\\1>", " ");
+        t = BREAKS.matcher(t).replaceAll("\n\n");
+        t = TAGS.matcher(t).replaceAll(" ");
+        t = unescape(t);
+        StringBuilder sb = new StringBuilder();
+        for (String para : t.split("\n\\s*\n")) {
+            String p = para.replaceAll("[\\s\\u00A0]+", " ").trim();
+            if (p.isEmpty()) continue;
+            if (sb.length() > 0) sb.append("\n\n");
+            sb.append(p);
+        }
+        return sb.toString();
+    }
+
+    private static Element childEl(Element parent, String localName) {
+        for (Node n = parent.getFirstChild(); n != null; n = n.getNextSibling())
+            if (n instanceof Element c && localName.equals(c.getLocalName())) return c;
+        return null;
     }
 
     /** Bing News links point at a click-tracking address that carries the real one in url=. */

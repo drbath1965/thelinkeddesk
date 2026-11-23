@@ -1,11 +1,11 @@
-# The Linked Desk 1.6
+# The Linked Desk 1.7
 
 A Windows desktop app that downloads world news every day, keeps every article, groups reports of the same event into one story, and links related stories across World, Finance, Politics, Society & Climate, and Tech & Science. Follow your own topics and search everything you've ever downloaded.
 
 ## Run it
 **Easiest (no Java needed):** run `build-installer.bat` once on a PC with the JDK 21+, then use what it makes:
-- `dist\The Linked Desk-1.6.0.msi` if the WiX Toolset 3 is installed (Start-menu entry, desktop shortcut, uninstaller; installs for your user, no admin rights), or
-- `dist\TheLinkedDesk-1.6.0-windows.zip` otherwise: unzip anywhere and run `The Linked Desk.exe`.
+- `dist\The Linked Desk-1.7.0.msi` if the WiX Toolset 3 is installed (Start-menu entry, desktop shortcut, uninstaller; installs for your user, no admin rights), or
+- `dist\TheLinkedDesk-1.7.0-windows.zip` otherwise: unzip anywhere and run `The Linked Desk.exe`.
 
 **Or from the jar:** with Java 21+ installed, double-click **Run The Linked Desk.bat** (or `LinkedDesk.jar`).
 
@@ -24,6 +24,10 @@ Opening the app a second time just brings the open window to the front.
 - **Ask** (needs an Anthropic API key): ask anything about your saved news ("What happened with the Strait of Hormuz this month?"). The app finds the matching stories and Claude answers from them only, citing each one as [S1], [S2]; click a citation to read the story. Nothing matching = Claude isn't asked.
 - **Topics**: your own subjects (e.g. *hypersonic OR "glide vehicle" -game*). Each is searched across world news (Google News and Bing News) on every daily download. Topic stories also join the main Stories view and link to the rest. Add, edit, pause, delete, or download now. Deleting a topic keeps what it found.
 - **Search**: searches every article ever saved (not just the time window), through a full-text index kept in `data\index` (built in the background the first time; about 11 s per million articles). With a million articles a search takes well under a second. `"exact phrase"`, `OR`, `-leave out`, and filters: `source:bbc`, `source:"al jazeera"`, `desk:finance`, `after:2026-11-01`, `before:…`, `after:7d`, `region:europe`, `is:unread`, `is:starred` (also in the Stories filter box). **Search live news** fetches fresh articles for the same words now; **Save as topic** turns a search into a daily topic.
+- **Podcasts, YouTube and social feeds**: in Settings > Edit feed list, **Add a podcast, YouTube channel or social account…** takes the link from your browser (youtube.com/@channel or a playlist, podcasts.apple.com/…, a Mastodon or Bluesky account, reddit.com/r/…) and finds its feed. Videos, episodes and posts group and link with the text coverage of the same event and are marked Video / Podcast / Post.
+- **Other languages**: articles in Spanish, French, German, Russian, Arabic, Chinese and other languages are recognised, and Claude translates their headlines after the daily download (at most 150 a day by default, within your budget; each is translated once). They then group with the English coverage, Search finds them by their English words, and the story page shows "Translated from Spanish" with the original headline. Without a key, country and leader names in other languages (Ucrania, Украина, Libia…) still tie them to English stories.
+- **Full text**: when a feed includes the whole article (many blogs, some news sites), the app keeps it (`data\fulltext`) and shows **Full text** on the story page; Search looks inside it too. Nothing is downloaded from the websites themselves, and nothing behind a paywall.
+- **Phone**: in Settings > Phone choose a folder your phone syncs (e.g. in OneDrive). After each daily download the briefing is written there as a page made for a phone (`The Linked Desk briefing.html`, light or dark like the phone, with what's new on your watchlist, and the last two weeks in `briefings\`). Open it in the OneDrive, Dropbox or Files app. Nothing is put online.
 - **News > Feed health**: every feed's status, last success, failures in a row, new articles per day and last error. A feed failing 7 times in a row is paused and retried weekly. Retry, change address, remove, or **Test all feeds**.
 - **View > Logs**: every download in the last 30 days with per-feed detail, plus the error log.
 - **Correct the app** on any story: **✓ Right / ✗ Wrong** on each link (right links are always shown; wrong ones are hidden and the words behind them count less), **Not this story** on an article that was grouped wrongly, and **Move to another desk…** (this story, everything from an outlet, or every headline with a word; optionally shown in a second desk too).
@@ -55,6 +59,7 @@ Opening the app a second time just brings the open window to the front.
 - `data\articles-YYYY-MM.tsv` – every article ever downloaded (opens in Excel); months older than 6 months become `articles-YYYY-MM.tsv.gz` (any zip tool opens them, or Tools > Archive and backup > Save as CSV). `data\index\` – the search index (rebuilt by itself; safe to delete). Nothing is deleted or capped. `data\backup\` – weekly copy of the current month. `data\topic-hits.tsv` – which topic found which article.
 - `feed-health.tsv`, `settings.properties`, `logs\` (`fetch-YYYY-MM.log`, `errors.log`).
 - `claude-usage.tsv` (every Claude request and its cost), `claude-cache.tsv` (answers already paid for), `link-checks.tsv` (Claude's verdicts on links), `digests\YYYY-MM-DD.txt` (each day's digest).
+- `translations.tsv` (English versions of headlines in other languages), `data\fulltext\` (full texts from feeds that include them).
 - `watchlist.txt` (*Name | search words | yes/no*), `watch-seen.tsv` (when you last opened each watch), `sources.txt` (*outlet = mute* or *outlet = 2*), `tickers.txt` (*SYMBOL = company names*), `pending-alerts.txt` (notifications held during quiet hours).
 - `data\read.txt` (what you've read), `data\starred.tsv` (your stars), `regions.txt` (where outlets are based; add your own).
 - How stories are linked (plain text, edit by hand if you like; changes apply straight away): `aliases.txt` (different names for one thing: *Federal Reserve = Fed*), `stopwords.txt` (words that never link stories), `link-feedback.tsv` (your Right/Wrong/Not this story verdicts), `desk-rules.tsv` (your desk moves), `calibration.properties` (thresholds per desk).

@@ -128,6 +128,11 @@ final class StoryBrowser extends JSplitPane {
             var sp = host.service().regions().spread(c);
             String meta = meta0 + (c.continues != null || !c.continuedBy.isEmpty() ? " · storyline" : "")
                     + (sp.singleSource() ? " · single source" : sp.regionCount() >= 2 ? " · " + sp.regionCount() + " regions" : "");
+            java.util.Set<String> kinds = new java.util.TreeSet<>();
+            for (com.linkeddesk.model.Article a : c.articles) if (!a.kind.isEmpty()) kinds.add(a.kindLabel().toLowerCase());
+            if (!kinds.isEmpty()) meta += " · incl. " + String.join(", ", kinds);
+            boolean translated = c.articles.stream().anyMatch(a -> !a.originalTitle.isEmpty());
+            if (translated) meta += " · translated";
             java.util.List<String> watching = host.watchesFor(c);
             if (!watching.isEmpty()) meta += " · watching: " + String.join(", ", watching);
             boolean unread = reads.isUnread(c);

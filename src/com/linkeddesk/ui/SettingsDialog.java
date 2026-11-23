@@ -37,6 +37,14 @@ final class SettingsDialog extends JDialog {
     private final JTextField smtpPort = new JTextField(5);
     private final JComboBox<String> smtpSecurity = new JComboBox<>(new String[]{"STARTTLS", "SSL", "NONE"});
     private final JPasswordField smtpPassword = new JPasswordField(22);
+    // Other languages, full text, phone (ANL-F11, FET-F07, UI-F12)
+    private final JCheckBox translate = new JCheckBox("Translate headlines of articles in other languages with Claude (after the daily download)");
+    private final JSpinner translatePerDay = new JSpinner(new SpinnerNumberModel(150, 0, 2000, 10));
+    private final JCheckBox keepFull = new JCheckBox("Keep the full text when a feed includes it");
+    private final JCheckBox searchFull = new JCheckBox("Search inside full texts too");
+    private final JTextField phoneFolder = new JTextField(30);
+    /** Writes the phone page now (set by the main window); returns where. */
+    java.util.concurrent.Callable<String> writePhone;
     /** Sends the briefing now with the email settings as saved (set by the main window); returns what happened. */
     java.util.concurrent.Callable<String> testEmail;
 
@@ -76,6 +84,12 @@ final class SettingsDialog extends JDialog {
             if (p.equals("587") || p.equals("465") || p.equals("25") || p.isEmpty())
                 smtpPort.setText(switch ((String) smtpSecurity.getSelectedItem()) { case "SSL" -> "465"; case "NONE" -> "25"; default -> "587"; });
         });
+
+        translate.setSelected(settings.translate());
+        translatePerDay.setValue(settings.translatePerDay());
+        keepFull.setSelected(settings.keepFullText());
+        searchFull.setSelected(settings.searchFullText());
+        phoneFolder.setText(settings.phoneFolder());
 
         JPanel form = new JPanel(new GridBagLayout());
         form.setBorder(BorderFactory.createEmptyBorder(14, 14, 6, 14));
@@ -141,6 +155,48 @@ final class SettingsDialog extends JDialog {
         form.add(note("Gmail: smtp.gmail.com, port 587, STARTTLS, your Gmail address as user name and an app password "
                 + "(Google Account > Security > App passwords), not your normal password. Outlook.com: smtp-mail.outlook.com, 587, STARTTLS. "
                 + "The password is stored encrypted like the API key."), g); g.gridy++;
+
+        form.add(section("Phone"), g); g.gridy++;
+        JPanel ph = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        JButton choosePhone = new JButton("Choose…"), writeNow = new JButton("Write it now");
+        choosePhone.addActionListener(e -> {
+            JFileChooser fc = new JFileChooser(phoneFolder.getText().isBlank() ? new java.io.File(System.getProperty("user.home")) : new java.io.File(phoneFolder.getText()));
+            fc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+            fc.setDialogTitle("Folder your phone can see (OneDrive, Dropbox, iCloud Drive…)");
+            if (fc.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) phoneFolder.setText(fc.getSelectedFile().getAbsolutePath());
+        });
+        writeNow.addActionListener(e -> {
+            if (writePhone == null) return;
+            if (phoneFolder.getText().isBlank()) { JOptionPane.showMessageDialog(this, "Choose a folder first."); return; }
+            settings.reload(); settings.setPhoneFolder(phoneFolder.getText()); settings.save();
+            writeNow.setEnabled(false);
+            new SwingWorker<String, Void>() {
+                @Override protected String doInBackground() throws Exception { return writePhone.call(); }
+                @Override protected void done() {
+                    writeNow.setEnabled(true);
+                    try { JOptionPane.showMessageDialog(SettingsDialog.this, "Written:\n" + get() + "\n\nOpen it on your phone in the OneDrive / Dropbox / Files app."); }
+                    catch (Exception ex) { JOptionPane.showMessageDialog(SettingsDialog.this, "Couldn't write it: " + (ex.getCause() == null ? ex : ex.getCause()).getMessage()); }
+                }
+            }.execute();
+        });
+        ph.add(new JLabel("Folder: ")); ph.add(phoneFolder); ph.add(Box.createHorizontalStrut(6)); ph.add(choosePhone); ph.add(Box.createHorizontalStrut(6)); ph.add(writeNow);
+        form.add(ph, g); g.gridy++;
+        form.add(note("After each daily download the briefing is written as a web page made for a phone (\"The Linked Desk briefing.html\", "
+                + "plus the last two weeks in a briefings folder). Pick a folder your phone syncs, such as one in OneDrive, and open the page "
+                + "there. Nothing is put online. Leave the folder empty to switch this off."), g); g.gridy++;
+
+        form.add(section("Other languages and full text"), g); g.gridy++;
+        form.add(translate, g); g.gridy++;
+        JPanel tpd = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        tpd.add(new JLabel("At most ")); tpd.add(translatePerDay); tpd.add(new JLabel(" articles a day"));
+        form.add(tpd, g); g.gridy++;
+        form.add(note("Articles in Spanish, French, Russian, Arabic and other languages are translated into English so they group and link "
+                + "with English coverage (the story page shows the original too). About 1-2 cents per 25 headlines with Claude Sonnet 5.5, within your "
+                + "monthly budget. Without a key, names like Ucrania or Украина still match Ukraine."), g); g.gridy++;
+        form.add(keepFull, g); g.gridy++;
+        form.add(searchFull, g); g.gridy++;
+        form.add(note("Some feeds (many blogs, some news sites) include the whole article. The app keeps that text and shows it under \"Full text\" "
+                + "on the story page. Nothing is downloaded from the websites themselves, and nothing behind a paywall."), g); g.gridy++;
 
         form.add(section("News sources"), g); g.gridy++;
         JPanel feeds = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
@@ -256,6 +312,11 @@ final class SettingsDialog extends JDialog {
             return;
         }
         if (!applyAlerts()) return;
+        settings.setTranslate(translate.isSelected());
+        settings.setTranslatePerDay((Integer) translatePerDay.getValue());
+        settings.setKeepFullText(keepFull.isSelected());
+        settings.setSearchFullText(searchFull.isSelected());
+        settings.setPhoneFolder(phoneFolder.getText());
         settings.setClaudeDigest(digest.isSelected());
         settings.setClaudeCheckLinks((Integer) checkLinks.getValue());
         settings.save();

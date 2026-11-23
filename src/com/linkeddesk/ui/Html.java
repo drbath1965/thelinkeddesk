@@ -67,8 +67,11 @@ final class Html {
      */
     /** What the page shows besides the story itself: your star, and how its coverage spreads over regions. */
     record Extras(boolean starred, com.linkeddesk.analysis.Regions.Spread spread, boolean newSinceRead,
-                  java.util.function.BiFunction<StoryCluster, StoryCluster, com.linkeddesk.ai.LinkChecks.Check> checks) {
-        Extras(boolean starred, com.linkeddesk.analysis.Regions.Spread spread, boolean newSinceRead) { this(starred, spread, newSinceRead, null); }
+                  java.util.function.BiFunction<StoryCluster, StoryCluster, com.linkeddesk.ai.LinkChecks.Check> checks,
+                  java.util.function.Predicate<Article> hasFullText) {
+        Extras(boolean starred, com.linkeddesk.analysis.Regions.Spread spread, boolean newSinceRead) { this(starred, spread, newSinceRead, null, null); }
+        Extras(boolean starred, com.linkeddesk.analysis.Regions.Spread spread, boolean newSinceRead,
+               java.util.function.BiFunction<StoryCluster, StoryCluster, com.linkeddesk.ai.LinkChecks.Check> checks) { this(starred, spread, newSinceRead, checks, null); }
     }
 
     static String story(StoryCluster c, boolean canExplain, SearchQuery q, boolean corrections) { return story(c, canExplain, q, corrections, null); }
@@ -146,8 +149,12 @@ final class Html {
         sb.append("<h2>Coverage</h2><table>");
         for (Article a : c.articlesNewestFirst()) {
             sb.append("<tr><td><a href='").append(esc(a.url)).append("'>").append(hl.apply(a.title)).append("</a><br>")
-              .append("<span class='meta'>").append(esc(a.source)).append(" · ").append(WHEN.format(Instant.ofEpochMilli(a.published)))
-              .append("</span>");
+              .append("<span class='meta'>").append(esc(a.source)).append(a.kindLabel().isEmpty() ? "" : " · " + a.kindLabel())
+              .append(" · ").append(WHEN.format(Instant.ofEpochMilli(a.published))).append("</span>");
+            if (!a.originalTitle.isEmpty())
+                sb.append("<br><span class='terms'>Translated from ").append(esc(com.linkeddesk.analysis.Language.name(a.lang))).append(" · original: ")
+                  .append(esc(a.originalTitle)).append("</span>");
+            if (x != null && x.hasFullText() != null && x.hasFullText().test(a)) sb.append(" <span class='act'>· <a href='full:").append(esc(a.id)).append("'>Full text</a></span>");
             if (corrections && c.articles.size() > 1) sb.append(" <span class='act'>· <a href='split:").append(esc(a.id)).append("'>Not this story</a></span>");
             if (corrections) sb.append(" <span class='act'>· <a href='mute:").append(java.net.URLEncoder.encode(a.source, java.nio.charset.StandardCharsets.UTF_8))
                     .append("'>Mute this outlet</a></span>");

@@ -161,11 +161,17 @@ public final class ArticleStore {
     /** Adds articles not seen before, writes them to disk, and returns the new ones. */
     public synchronized List<Article> addAll(Collection<Article> incoming) throws IOException {
         List<Article> fresh = new ArrayList<>();
+        Map<Path, StringBuilder> fullTexts = new LinkedHashMap<>();
         for (Article a : incoming) {
             long tk = titleKey(a);
             if (ids.contains(a.id) || titleKeys.containsKey(tk)) continue;
             ids.add(a.id);
             titleKeys.put(tk, a.id);
+            if (!a.fullText.isEmpty()) {
+                // The publisher's full text goes to its own file; the copy kept in memory doesn't carry it.
+                fullTexts.computeIfAbsent(fullTextFile(a.fetched), k -> new StringBuilder()).append(esc(a.fullText)).append('\t').append(encode(a)).append('\n');
+                a = new Article(a.id, a.url, a.title, a.summary, a.source, a.feedCategory, a.published, a.fetched, a.kind, "");
+            }
             byId.put(a.id, a);
             fresh.add(a);
         }
@@ -198,6 +204,14 @@ public final class ArticleStore {
                     offsets.put(f, ch.size());
                 }
                 fullyLoaded.add(f);
+            }
+            for (var e : fullTexts.entrySet()) {
+                Files.createDirectories(e.getKey().getParent());
+                try (FileChannel ch = FileChannel.open(e.getKey(), StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.APPEND)) {
+                    ByteBuffer bb = ByteBuffer.wrap(e.getValue().toString().getBytes(StandardCharsets.UTF_8));
+                    while (bb.hasRemaining()) ch.write(bb);
+                    ch.force(true);
+                }
             }
         }
         backupIfDue();
@@ -350,6 +364,130 @@ public final class ArticleStore {
         return new java.io.BufferedReader(new java.io.InputStreamReader(in, StandardCharsets.UTF_8), 1 << 16);
     }
 
+    // ------------------------------------------------------------------ full text from publishers' feeds (FET-F07)
+
+    private Path fullTextFile(long epochMillis) {
+        return dir.resolve("fulltext").resolve("fulltext-" + MONTH.format(Instant.ofEpochMilli(epochMillis).atZone(zone)) + ".tsv");
+    }
+
+    /** The months of full text, oldest first (.tsv, or .tsv.gz once compressed). */
+    public List<Path> fullTextFiles() throws IOException {
+        List<Path> out = new ArrayList<>();
+        Path fd = dir.resolve("fulltext");
+        if (!Files.isDirectory(fd)) return out;
+        try (DirectoryStream<Path> ds = Files.newDirectoryStream(fd, "fulltext-*.tsv{,.gz}")) { for (Path p : ds) out.add(p); }
+        out.sort(null);
+        return out;
+    }
+
+    private final Map<Path, Map<String, Long>> fullTextOffsets = new HashMap<>();
+    private final Map<Path, Long> fullTextSizes = new HashMap<>();
+
+    /** The full text the publisher's feed gave for this article, or "" (most feeds give a summary only). */
+    public String fullText(Article a) {
+        try {
+            Path f = fullTextFile(a.fetched);
+            Path gz = f.resolveSibling(f.getFileName() + ".gz");
+            String prefix = "\t" + esc(a.id) + "\t";
+            if (Files.exists(f)) {
+                Map<String, Long> offs;
+                synchronized (fullTextOffsets) {
+                    long size = Files.size(f);
+                    offs = fullTextOffsets.get(f);
+                    if (offs == null || fullTextSizes.getOrDefault(f, -1L) != size) {
+                        offs = new HashMap<>();
+                        long pos = 0;
+                        try (InputStream in = new java.io.BufferedInputStream(Files.newInputStream(f), 1 << 16)) {
+                            ByteArrayOutputStream line = new ByteArrayOutputStream(4096);
+                            long start = 0;
+                            int b;
+                            while ((b = in.read()) >= 0) {
+                                pos++;
+                                if (b != '\n') { line.write(b); continue; }
+                                String l = line.toString(StandardCharsets.UTF_8);
+                                int t = l.indexOf('\t');
+                                if (t > 0) { int t2 = l.indexOf('\t', t + 1); if (t2 > t) offs.put(unesc(l.substring(t + 1, t2)), start); }
+                                line.reset();
+                                start = pos;
+                            }
+                        }
+                        fullTextOffsets.put(f, offs);
+                        fullTextSizes.put(f, size);
+                    }
+                }
+                Long at = offs.get(a.id);
+                if (at != null) try (FileChannel ch = FileChannel.open(f, StandardOpenOption.READ)) {
+                    ch.position(at);
+                    java.io.BufferedReader r = new java.io.BufferedReader(new java.io.InputStreamReader(java.nio.channels.Channels.newInputStream(ch), StandardCharsets.UTF_8));
+                    String l = r.readLine();
+                    if (l != null && l.contains(prefix)) return unesc(l.substring(0, l.indexOf('\t')));
+                }
+            }
+            if (Files.exists(gz)) try (java.io.BufferedReader r = reader(gz)) {
+                String l;
+                while ((l = r.readLine()) != null) if (l.contains(prefix)) return unesc(l.substring(0, l.indexOf('\t')));
+            }
+        } catch (IOException e) {
+            System.err.println("Could not read full text: " + e.getMessage());
+        }
+        return "";
+    }
+
+    private final Map<Path, Set<String>> gzFullIds = new HashMap<>();
+
+    /** True if the publisher's feed gave a full text for this article (cheap after the first call per month). */
+    public boolean hasFullText(Article a) {
+        Path f = fullTextFile(a.fetched);
+        Path gz = f.resolveSibling(f.getFileName() + ".gz");
+        try {
+            if (Files.exists(f)) {
+                if (fullTextOffsets.get(f) == null || fullTextSizes.getOrDefault(f, -1L) != Files.size(f)) fullText(new Article(" ", "", "", "", "", Category.WORLD, a.fetched, a.fetched));
+                Map<String, Long> offs = fullTextOffsets.get(f);
+                if (offs != null && offs.containsKey(a.id)) return true;
+            }
+            if (Files.exists(gz)) {
+                Set<String> idsIn;
+                synchronized (gzFullIds) {
+                    idsIn = gzFullIds.get(gz);
+                    if (idsIn == null) {
+                        idsIn = new HashSet<>();
+                        try (java.io.BufferedReader r = reader(gz)) {
+                            String l;
+                            while ((l = r.readLine()) != null) {
+                                int t = l.indexOf('\t'), t2 = t < 0 ? -1 : l.indexOf('\t', t + 1);
+                                if (t2 > t) idsIn.add(unesc(l.substring(t + 1, t2)));
+                            }
+                        }
+                        gzFullIds.put(gz, idsIn);
+                    }
+                }
+                return idsIn.contains(a.id);
+            }
+        } catch (IOException ignored) { }
+        return false;
+    }
+
+    /** Every article whose stored full text matches {@code text} and {@code match} (for searching inside full texts). */
+    public void scanFullText(Predicate<String> text, Predicate<Article> match, Consumer<Article> out) throws IOException {
+        IOException[] err = new IOException[1];
+        fullTextFiles().parallelStream().forEach(f -> {
+            try (java.io.BufferedReader r = reader(f)) {
+                String l;
+                while ((l = r.readLine()) != null) {
+                    int t = l.indexOf('\t');
+                    if (t < 0) continue;
+                    if (!text.test(unesc(l.substring(0, t)))) continue;
+                    Article a = decode(l.substring(t + 1));
+                    if (a == null) continue;
+                    Article m = get(a.id);
+                    if (m != null) a = m;
+                    if (match.test(a)) synchronized (out) { out.accept(a); }
+                }
+            } catch (IOException e) { synchronized (err) { err[0] = e; } }
+        });
+        if (err[0] != null) throw err[0];
+    }
+
     // ------------------------------------------------------------------ compressing old months (STO-F04)
 
     /** Months are written as gzip members of about this many bytes, so one article can be read without unpacking the month. */
@@ -366,6 +504,21 @@ public final class ArticleStore {
             if (compressed(f) || !monthOf(f).isBefore(cutoff)) continue;
             compress(f);
             done.add(monthOf(f).toString());
+        }
+        for (Path f : fullTextFiles()) {
+            String n = f.getFileName().toString();      // fulltext-YYYY-MM.tsv
+            if (compressed(f)) continue;
+            YearMonth m;
+            try { m = YearMonth.parse(n.substring(9, 16)); } catch (RuntimeException e) { continue; }
+            if (!m.isBefore(cutoff)) continue;
+            Path gz = f.resolveSibling(n + ".gz"), tmp = f.resolveSibling(n + ".gz.tmp");
+            try (java.io.OutputStream o = new java.util.zip.GZIPOutputStream(Files.newOutputStream(tmp), 1 << 16)) {
+                if (Files.exists(gz)) try (InputStream in = new java.util.zip.GZIPInputStream(Files.newInputStream(gz))) { in.transferTo(o); }
+                Files.copy(f, o);
+            }
+            Files.move(tmp, gz, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            Files.delete(f);
+            synchronized (fullTextOffsets) { fullTextOffsets.remove(f); }
         }
         return done;
     }
@@ -477,8 +630,10 @@ public final class ArticleStore {
     }
 
     static String encode(Article a) {
-        return String.join("\t", esc(a.id), esc(a.url), esc(a.title), esc(a.summary), esc(a.source),
+        String line = String.join("\t", esc(a.id), esc(a.url), esc(a.title), esc(a.summary), esc(a.source),
                 a.feedCategory.name(), Long.toString(a.published), Long.toString(a.fetched));
+        // A 9th column only for videos, podcasts and posts, so the files stay readable by earlier versions.
+        return a.kind.isEmpty() ? line : line + "\t" + esc(a.kind);
     }
 
     public static Article decode(String line) {
@@ -487,7 +642,7 @@ public final class ArticleStore {
         try {
             if (p[0].isEmpty() || p[2].isEmpty()) return null;
             return new Article(unesc(p[0]), unesc(p[1]), unesc(p[2]), unesc(p[3]), unesc(p[4]),
-                    Category.parse(p[5]), Long.parseLong(p[6]), Long.parseLong(p[7]));
+                    Category.parse(p[5]), Long.parseLong(p[6]), Long.parseLong(p[7]), p.length > 8 ? unesc(p[8]) : "", "");
         } catch (NumberFormatException e) {
             return null;
         }

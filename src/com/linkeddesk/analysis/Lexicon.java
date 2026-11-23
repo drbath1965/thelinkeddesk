@@ -116,14 +116,61 @@ public final class Lexicon {
             # are grouped. Tools > Words behind links shows which words create the most links.
             """;
 
+    /**
+     * Names in other languages (ANL-F11), always added after your aliases.txt: an article in Spanish about "Ucrania"
+     * shares the name Ukraine with English coverage even before (or without) translation.
+     */
+    public static final String MULTILINGUAL = """
+            United States = Estados Unidos, EE.UU., EEUU, États-Unis, Etats-Unis, Vereinigte Staaten, Stati Uniti, США, Сполучені Штати, الولايات المتحدة
+            United Kingdom = Reino Unido, Royaume-Uni, Vereinigtes Königreich, Regno Unito, Великобритания, Велика Британія
+            Russia = Rusia, Russie, Russland, Rússia, Россия, Росія, Rosja, روسيا
+            Ukraine = Ucrania, Ucraina, Ucrânia, Ukraina, Украина, Україна, أوكرانيا
+            China = Chine, Cina, Китай, Chiny, الصين
+            Germany = Alemania, Allemagne, Deutschland, Germania, Alemanha, Германия, Німеччина, Niemcy
+            France = Francia, Frankreich, França, Франция, Франція, Francja
+            Spain = España, Espagne, Spanien, Spagna, Espanha, Испания, Іспанія, Hiszpania
+            Italy = Italia, Italie, Italien, Itália, Италия, Італія, Włochy
+            Poland = Polonia, Pologne, Polen, Polónia, Польша, Польща, Polska
+            Israel = Israël, Израиль, Ізраїль, إسرائيل
+            Iran = Irán, Irã, Иран, Іран, إيران
+            Gaza = Gaza, Газа, غزة
+            Turkey = Turquía, Turquie, Türkei, Turchia, Turquia, Türkiye, Турция, Туреччина
+            Mexico = México, Mexique, Mexiko, Messico, Мексика
+            Brazil = Brasil, Brésil, Brasilien, Brasile, Бразилия
+            Argentina = Argentine, Argentinien, Аргентина
+            Venezuela = Venezuela, Венесуэла
+            Japan = Japón, Japon, Giappone, Japão, Япония, Японія
+            India = Inde, Indien, Índia, Индия, Індія
+            Belgium = Bélgica, Belgique, Belgien, Belgio, Бельгия
+            Netherlands = Países Bajos, Pays-Bas, Niederlande, Paesi Bassi, Nederland, Нидерланды
+            Syria = Siria, Syrie, Syrien, Síria, Сирия, سوريا
+            Lebanon = Líbano, Liban, Libanon, Libano, Ливан, لبنان
+            Libya = Libia, Libye, Libyen, Líbia, Ливия, ليبيا
+            Egypt = Egipto, Égypte, Ägypten, Egitto, Egito, Египет, مصر
+            Saudi Arabia = Arabia Saudita, Arabie saoudite, Saudi-Arabien, Arábia Saudita, Саудовская Аравия, السعودية
+            European Union = Unión Europea, Union européenne, Europäische Union, Unione Europea, União Europeia, Евросоюз, ЕС, ЄС
+            United Nations = Naciones Unidas, ONU, Nations unies, Vereinte Nationen, Nazioni Unite, ООН
+            NATO = OTAN, НАТО
+            Federal Reserve = Reserva Federal, Réserve fédérale
+            European Central Bank = Banco Central Europeo, BCE, Banque centrale européenne, Europäische Zentralbank, EZB
+            Vladimir Putin = Vladímir Putin, Wladimir Putin, Poutine, Путин, Путін
+            Volodymyr Zelenskyy = Zelenski, Zelensky, Selenskyj, Zelenskyj, Зеленский, Зеленський
+            Donald Trump = Трамп, ترامب
+            Xi Jinping = Си Цзиньпин
+            Kyiv = Kiev, Kiew, Kijów, Киев, Київ
+            Moscow = Moscú, Moscou, Moskau, Mosca, Москва
+            Beijing = Pekín, Pékin, Peking, Pechino, Пекин
+            Brussels = Bruselas, Bruxelles, Brüssel, Bruxelas, Брюссель
+            """;
+
     /** Reads aliases.txt and stopwords.txt, creating them with the defaults if they don't exist. */
     public static Lexicon load(Path aliasesFile, Path stopwordsFile) throws IOException {
         if (!Files.exists(aliasesFile)) Files.writeString(aliasesFile, DEFAULT_ALIASES, StandardCharsets.UTF_8);
         if (!Files.exists(stopwordsFile)) Files.writeString(stopwordsFile, DEFAULT_STOPWORDS, StandardCharsets.UTF_8);
-        return parse(Files.readString(aliasesFile, StandardCharsets.UTF_8), Files.readString(stopwordsFile, StandardCharsets.UTF_8));
+        return parse(Files.readString(aliasesFile, StandardCharsets.UTF_8) + "\n" + MULTILINGUAL, Files.readString(stopwordsFile, StandardCharsets.UTF_8));
     }
 
-    public static Lexicon defaults() { return parse(DEFAULT_ALIASES, ""); }
+    public static Lexicon defaults() { return parse(DEFAULT_ALIASES + "\n" + MULTILINGUAL, ""); }
 
     public static Lexicon parse(String aliasText, String stopText) {
         Lexicon x = new Lexicon();

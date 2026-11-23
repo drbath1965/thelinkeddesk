@@ -154,6 +154,9 @@ public final class ClaudeClient {
 
     // ---------------------------------------------------------------- minimal JSON helpers
 
+    /** JSON string escaping (for test stand-ins of the API). */
+    public static String jsonForTests(String s) { return json(s); }
+
     static String json(String s) {
         StringBuilder sb = new StringBuilder("\"");
         for (char c : s.toCharArray()) {

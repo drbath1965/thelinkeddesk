@@ -113,7 +113,7 @@ public final class NewsService {
             Long k = days.ceiling(d - 5);
             if (k != null && k <= d + 5) near.add(a);
         }
-        Analyzer.Result r = Analyzer.analyze(near, options());
+        Analyzer.Result r = Analyzer.analyze(prepare(near), options());
         List<StoryCluster> kept = new ArrayList<>();
         for (StoryCluster c : r.stories()) if (c.articles.stream().anyMatch(a -> starred.contains(a.id))) kept.add(c);
         kept.sort(Comparator.comparingLong((StoryCluster c) -> c.lastSeen).reversed());
@@ -175,6 +175,8 @@ public final class NewsService {
             else report.add(new FetchReport.FeedResult(f, 0, 0, null, false, true, 0));
         }
         report.expected = feeds.size();
+        settings.reload();
+        boolean keepFull = settings.keepFullText();
         int[] done = {0};
         fetcher.fetchAll(due, health, fetched -> {
             FeedFetcher.FeedItems fi = fetched;
@@ -187,7 +189,10 @@ public final class NewsService {
                 }
                 try {
                     if (fi.ok()) {
-                        List<Article> newOnes = store.addAll(fi.items());
+                        List<Article> items = fi.items();
+                        if (!keepFull) items = items.stream().map(x -> x.fullText.isEmpty() ? x
+                                : new Article(x.id, x.url, x.title, x.summary, x.source, x.feedCategory, x.published, x.fetched, x.kind, "")).toList();
+                        List<Article> newOnes = store.addAll(items);
                         added = newOnes.size();
                         report.addedArticles.addAll(newOnes);
                         if (foundIds != null) foundIds.accept(fi.items().stream().map(store::canonicalId).toList());
@@ -224,7 +229,41 @@ public final class NewsService {
     public Analyzer.Result analyze(int days) {
         List<Article> articles = days <= 0 ? store.all()
                 : store.since(System.currentTimeMillis() - days * 24L * 3600_000);
-        return tieTickers(Analyzer.analyze(sources().visible(articles), options()));
+        return tieTickers(Analyzer.analyze(prepare(sources().visible(articles)), options()));
+    }
+
+    private com.linkeddesk.ai.Translations translations;
+
+    /** Saved English versions of non-English articles (ANL-F11). */
+    public synchronized com.linkeddesk.ai.Translations translations() {
+        if (translations == null) translations = new com.linkeddesk.ai.Translations(AppPaths.home());
+        return translations.load();
+    }
+
+    /**
+     * Has Claude translate the newest non-English articles of the last 3 days (within the daily limit and the monthly
+     * budget). Returns how many were translated.
+     */
+    public int translateNew() throws Exception {
+        settings.reload();
+        if (!settings.translate() || !settings.hasApiKey()) return 0;
+        var tr = translations();
+        int left = settings.translatePerDay() - tr.madeOn(java.time.LocalDate.now());
+        if (left <= 0) return 0;
+        List<Article> recent = new ArrayList<>(sources().visible(store.since(System.currentTimeMillis() - 3 * 86_400_000L)));
+        recent.sort(Comparator.comparingLong((Article a) -> a.published).reversed());
+        int n = tr.translate(recent, left, claude());
+        if (n > 0) { Logs.run("claude", "translated " + n + " non-English articles", "", 0); synchronized (this) { options = null; } }
+        return n;
+    }
+
+    /** Articles as the analysis sees them: translated into English where a translation is saved (ANL-F11). */
+    public List<Article> prepare(List<Article> in) {
+        var tr = translations();
+        if (tr.isEmpty()) return in;
+        List<Article> out = new ArrayList<>(in.size());
+        for (Article a : in) out.add(tr.apply(a));
+        return out;
     }
 
     // ------------------------------------------------------------------ P5: watchlist, sources, tickers
@@ -269,7 +308,7 @@ public final class NewsService {
         var ws = watches();
         List<Article> hits = new ArrayList<>();
         for (Article a : sources().visible(store.since(since))) if (ws.matching(a).stream().anyMatch(x -> x.name().equals(w.name()))) hits.add(a);
-        Analyzer.Result r = Analyzer.analyze(hits, options());
+        Analyzer.Result r = Analyzer.analyze(prepare(hits), options());
         r.stories().sort(Comparator.comparingLong((StoryCluster c) -> c.lastSeen).reversed());
         return r;
     }
@@ -281,7 +320,7 @@ public final class NewsService {
         var t = tickers();
         List<Article> hits = new ArrayList<>();
         for (Article a : sources().visible(store.since(since))) if (t.of(a).contains(symbol)) hits.add(a);
-        Analyzer.Result r = Analyzer.analyze(hits, options());
+        Analyzer.Result r = Analyzer.analyze(prepare(hits), options());
         r.stories().sort(Comparator.comparingLong((StoryCluster c) -> c.lastSeen).reversed());
         return r;
     }
@@ -291,7 +330,7 @@ public final class NewsService {
         long now = System.currentTimeMillis();
         store.ensureLoaded(now - 4 * 86_400_000L);
         var src = sources();
-        return com.linkeddesk.analysis.Briefing.build(tieTickers(Analyzer.analyze(src.visible(store.since(now - 4 * 86_400_000L)), options())), now, src::coverage);
+        return com.linkeddesk.analysis.Briefing.build(tieTickers(Analyzer.analyze(prepare(src.visible(store.since(now - 4 * 86_400_000L))), options())), now, src::coverage);
     }
 
     /** Stories made only of articles a topic found. */
@@ -300,7 +339,7 @@ public final class NewsService {
         var ids = topicHits.articles(topic);
         List<Article> list = new ArrayList<>();
         for (Article a : store.since(since)) if (ids.contains(a.id)) list.add(a);
-        return Analyzer.analyze(sources().visible(list), options());
+        return Analyzer.analyze(prepare(sources().visible(list)), options());
     }
 
     // ------------------------------------------------------------------ search
@@ -325,34 +364,67 @@ public final class NewsService {
         }
     }
 
-    public record SearchResult(List<Article> matches, Analyzer.Result stories, int total, boolean capped, long millis) {}
+    public record SearchResult(List<Article> matches, Analyzer.Result stories, int total, boolean capped, long millis, int inFullText) {
+        public SearchResult(List<Article> matches, Analyzer.Result stories, int total, boolean capped, long millis) { this(matches, stories, total, capped, millis, 0); }
+    }
 
     public static final int SEARCH_CAP = 1500;
 
     /** Searches every saved article (all history). Results are grouped into stories, newest first. */
     public SearchResult search(SearchQuery q, SearchFilter filter) throws IOException {
         long t0 = System.nanoTime();
+        java.util.function.Predicate<Article> fields = fieldTest(q);
+        boolean mutedHidden = q.fields().stream().noneMatch(f -> f.name().equals("source"));
+        // Articles whose words appear only in the full text their feed gave (FET-F07).
+        List<Article> inFull = new ArrayList<>();
+        settings.reload();
+        if (q.hasWords() && settings.searchFullText()) {
+            store.scanFullText(t -> !q.cannotMatch(t) && q.matchesFolded(SearchQuery.foldText(t)),
+                    a -> filter.accepts(a) && !q.matches(a) && fields.test(a), inFull::add);
+            if (mutedHidden) inFull = new ArrayList<>(sources().visible(inFull));
+        }
+        // Articles whose English translation matches (ANL-F11): "ukraine" also finds "Ucrania afirma…".
+        var tr = translations();
+        if (q.hasWords() && !tr.isEmpty()) {
+            java.util.Set<String> seen = new java.util.HashSet<>();
+            for (Article a : inFull) seen.add(a.id);
+            for (String id : tr.ids()) {
+                Article a = store.get(id);          // translations are of recent articles, which are in memory
+                if (a == null || seen.contains(a.id) || q.matches(a)) continue;
+                Article en = tr.apply(a);
+                if (q.matches(en) && filter.accepts(a) && fields.test(a) && (!mutedHidden || !sources().muted(a.source))) { inFull.add(a); seen.add(a.id); }
+            }
+        }
         // Plain words, no filters: the index counts the matches and only the newest are read.
         if (filter.desk() == null && (filter.source() == null || filter.source().isBlank()) && !sources().any()) {
             var fast = store.index().newest(q, SEARCH_CAP, filter.from(), filter.to());
             if (fast != null) {
-                Analyzer.Result stories = Analyzer.analyze(fast.newest(), options());
-                return new SearchResult(fast.newest(), stories, fast.total(), fast.total() > SEARCH_CAP, (System.nanoTime() - t0) / 1_000_000);
+                List<Article> kept = new ArrayList<>(fast.newest());
+                java.util.Set<String> have = new java.util.HashSet<>();
+                for (Article a : kept) have.add(a.id);
+                for (Article a : inFull) if (have.add(a.id)) kept.add(a);
+                kept.sort(Comparator.comparingLong((Article a) -> a.published).reversed());
+                int total = fast.total() + inFull.size();
+                if (kept.size() > SEARCH_CAP) kept = new ArrayList<>(kept.subList(0, SEARCH_CAP));
+                return new SearchResult(kept, Analyzer.analyze(prepare(kept), options()), total, total > SEARCH_CAP, (System.nanoTime() - t0) / 1_000_000, inFull.size());
             }
         }
         List<Article> hits = new ArrayList<>();
-        if (!q.isEmpty()) {
-            java.util.function.Predicate<Article> fields = fieldTest(q);
-            store.find(q, a -> filter.accepts(a) && (!q.hasWords() || q.matches(a)) && fields.test(a), hits::add);
-        }
-        if (q.fields().stream().noneMatch(f -> f.name().equals("source"))) hits = new ArrayList<>(sources().visible(hits));  // muted outlets only on request
+        if (!q.isEmpty()) store.find(q, a -> filter.accepts(a) && (!q.hasWords() || q.matches(a)) && fields.test(a), hits::add);
+        if (mutedHidden) hits = new ArrayList<>(sources().visible(hits));  // muted outlets only on request
+        java.util.Set<String> have = new java.util.HashSet<>();
+        for (Article a : hits) have.add(a.id);
+        for (Article a : inFull) if (have.add(a.id)) hits.add(a);
         hits.sort(Comparator.comparingLong((Article a) -> a.published).reversed());
         int total = hits.size();
         boolean capped = total > SEARCH_CAP;
         List<Article> kept = capped ? new ArrayList<>(hits.subList(0, SEARCH_CAP)) : hits;
-        Analyzer.Result stories = Analyzer.analyze(kept, options());
-        return new SearchResult(kept, stories, total, capped, (System.nanoTime() - t0) / 1_000_000);
+        Analyzer.Result stories = Analyzer.analyze(prepare(kept), options());
+        return new SearchResult(kept, stories, total, capped, (System.nanoTime() - t0) / 1_000_000, inFull.size());
     }
+
+    /** The full text a publisher's feed gave for an article ("" for most). */
+    public String fullText(Article a) { return store.fullText(a); }
 
     /**
      * Live search: downloads fresh news for the words now (Google News + Bing News), saves it, and returns
@@ -374,7 +446,7 @@ public final class NewsService {
         int total = hits.size();
         boolean capped = total > SEARCH_CAP;
         List<Article> kept = capped ? new ArrayList<>(hits.subList(0, SEARCH_CAP)) : hits;
-        return new SearchResult(kept, Analyzer.analyze(kept, options()), total, capped, (System.nanoTime() - t0) / 1_000_000);
+        return new SearchResult(kept, Analyzer.analyze(prepare(kept), options()), total, capped, (System.nanoTime() - t0) / 1_000_000);
     }
 
     // ------------------------------------------------------------------ linking settings and your corrections
@@ -582,6 +654,10 @@ public final class NewsService {
         if (!settings.hasApiKey() || settings.claudeBudget() <= 0) return "Claude: off (no API key or budget).";
         StringBuilder sb = new StringBuilder();
         try {
+            if (settings.translate()) {
+                int t = translateNew();
+                if (t > 0) sb.append(t).append(" articles translated. ");
+            }
             com.linkeddesk.analysis.Briefing b = briefing();
             if (settings.claudeDigest()) { writeDigest(b, false); sb.append("Digest written. "); }
             int n = checkLinks(b, settings.claudeCheckLinks());
@@ -642,7 +718,7 @@ public final class NewsService {
         List<Article> top = new ArrayList<>(score.keySet());
         top.sort(Comparator.comparingDouble((Article a) -> score.get(a)).reversed().thenComparing(Comparator.comparingLong((Article a) -> a.published).reversed()));
         if (top.size() > 400) top = new ArrayList<>(top.subList(0, 400));
-        Analyzer.Result r = Analyzer.analyze(top, opt);
+        Analyzer.Result r = Analyzer.analyze(prepare(top), opt);
         java.util.Map<StoryCluster, Double> best = new java.util.HashMap<>();
         double bestAll = 0;
         for (StoryCluster c : r.stories()) {
@@ -724,7 +800,7 @@ public final class NewsService {
     public Analyzer.Result analyzeRange(long from, long to) {
         List<Article> in = new ArrayList<>();
         for (Article a : store.since(from)) if (a.published < to) in.add(a);
-        return tieTickers(Analyzer.analyze(sources().visible(in), options()));
+        return tieTickers(Analyzer.analyze(prepare(sources().visible(in)), options()));
     }
 
     /** The report for the week (Monday to Sunday) holding this day. */
@@ -787,12 +863,41 @@ public final class NewsService {
         return info;
     }
 
+    /**
+     * Writes the briefing page for your phone into the folder chosen in Settings (UI-F12). Returns the page, or null
+     * when no folder is set.
+     */
+    public java.nio.file.Path publishPhone() throws IOException {
+        settings.reload();
+        if (settings.phoneFolder().isBlank()) return null;
+        var b = briefing();
+        var d = todaysDigest();
+        var reg = regions();
+        // New on your watchlist: stories with articles since you last looked at that watch.
+        var ws = watches();
+        java.util.Map<String, List<StoryCluster>> watchNew = new java.util.LinkedHashMap<>();
+        var hits = ws.stories(b.result().stories());
+        for (var w : ws.all()) {
+            long seen = ws.lastSeen(w.name());
+            List<StoryCluster> l = new ArrayList<>();
+            for (var e : hits.entrySet())
+                if (e.getValue().contains(w) && e.getKey().articles.stream().anyMatch(a -> a.fetched > seen && a.published > b.now() - 86_400_000L)) l.add(e.getKey());
+            if (!l.isEmpty()) watchNew.put(w.name(), l);
+        }
+        java.nio.file.Path out = com.linkeddesk.export.PhonePage.write(java.nio.file.Path.of(settings.phoneFolder()), java.time.LocalDate.now(),
+                (earlier, inDays) -> com.linkeddesk.export.PhonePage.build(b, d, reg, watchNew, earlier, inDays));
+        Logs.run("phone", "briefing page written: " + out, "", 0);
+        return out;
+    }
+
     /** After the daily download: compress old months, update the index, and the weekly backup if it's due. */
     public String maintenance() {
         List<String> out = new ArrayList<>();
         try { var c = compressOldMonths(); if (!c.isEmpty()) out.add("Compressed " + String.join(", ", c) + "."); }
         catch (Exception e) { Logs.error("Compressing old months", e); out.add("Compressing old months failed: " + e.getMessage()); }
         try { refreshIndex(); } catch (Exception e) { Logs.error("Updating the search index", e); }
+        try { var p = publishPhone(); if (p != null) out.add("Phone briefing updated."); }
+        catch (Exception e) { Logs.error("Writing the phone briefing", e); out.add("The phone briefing couldn't be written: " + e.getMessage()); }
         settings.reload();
         if (settings.backupWeekly() && !settings.backupFolder().isBlank() && System.currentTimeMillis() - settings.backupLast() > 7L * 86_400_000L - 3_600_000L) {
             try { out.add("Backed up to " + backupNow().file() + "."); }

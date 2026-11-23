@@ -410,6 +410,8 @@ public final class MainWindow extends JFrame implements Host {
                 try { status.setText(get()); com.linkeddesk.app.Logs.run("claude", get(), "", 0); } catch (Exception ignored) { }
                 briefing.reload();
                 stories.refreshDetail();
+                analyze(null);       // translations change grouping
+                new Thread(() -> { try { service.publishPhone(); } catch (Exception ex) { com.linkeddesk.app.Logs.error("Writing the phone briefing", ex); } }, "phone").start();
             }
         }.execute();
     }
@@ -801,6 +803,7 @@ public final class MainWindow extends JFrame implements Host {
     private void openSettings() {
         SettingsDialog d = new SettingsDialog(this, service.settings());
         d.testEmail = () -> service.emailBriefing(true);
+        d.writePhone = () -> { var p = service.publishPhone(); return p == null ? "No folder chosen." : p.toString(); };
         d.setVisible(true);
         if (d.wasSaved()) stories.refreshDetail();
         if (d.lookChanged()) {

@@ -59,7 +59,7 @@ final class StoryPane extends JScrollPane {
         var reads = host.service().reads();
         int pos = fresh ? 0 : detail.getCaretPosition();
         detail.setText(Html.story(c, true, highlight, true, new Html.Extras(reads.isStarred(c), host.service().regions().spread(c), reads.hasNewSinceRead(c),
-                (a, b) -> host.service().linkChecks().find(a, b))));
+                (a, b) -> host.service().linkChecks().find(a, b), host.service().store()::hasFullText)));
         detail.setCaretPosition(Math.min(pos, detail.getDocument().getLength()));
         current = c;
         if (fresh && startTimer) readTimer.restart();
@@ -124,6 +124,9 @@ final class StoryPane extends JScrollPane {
                     host.articlesChanged();
                 } catch (Exception ex) { JOptionPane.showMessageDialog(this, "Could not save: " + ex.getMessage()); }
             }
+        } else if (href.startsWith("full:") && current != null) {
+            String id = href.substring(5);
+            current.articles.stream().filter(a -> a.id.equals(id)).findFirst().ifPresent(this::showFullText);
         } else if (href.equals("copy:") && current != null) {
             host.copyStory(current);
         } else if (href.equals("export:") && current != null) {
@@ -138,6 +141,29 @@ final class StoryPane extends JScrollPane {
             try { Desktop.getDesktop().browse(URI.create(href)); }
             catch (Exception ex) { JOptionPane.showMessageDialog(this, "Could not open the link: " + ex.getMessage()); }
         }
+    }
+
+    /** The full text the publisher's feed gave (FET-F07), in a reading window. */
+    private void showFullText(com.linkeddesk.model.Article a) {
+        String text = host.service().fullText(a);
+        if (text.isEmpty()) { host.status("No full text was saved for this article."); return; }
+        JEditorPane p = StoryBrowser.htmlPane();
+        StringBuilder sb = new StringBuilder("<html><head><style>" + Html.css() + " p{margin:0 0 10px 0}</style></head><body><h1>" + Html.esc(a.title) + "</h1><p class='meta'>"
+                + Html.esc(a.source) + " · full text from the publisher's own feed · <a href='" + Html.esc(a.url) + "'>open the article</a></p>");
+        for (String para : text.split("\n\n")) sb.append("<p>").append(Html.esc(para)).append("</p>");
+        p.setText(sb.append("</body></html>").toString());
+        p.setCaretPosition(0);
+        p.addHyperlinkListener(e -> {
+            if (e.getEventType() == javax.swing.event.HyperlinkEvent.EventType.ACTIVATED)
+                try { Desktop.getDesktop().browse(URI.create(e.getDescription())); } catch (Exception ignored) { }
+        });
+        JScrollPane sp = new JScrollPane(p);
+        sp.setPreferredSize(new Dimension(Html.cssPx(700) + 60, 620));
+        JDialog d = new JDialog(SwingUtilities.getWindowAncestor(this), a.source + ": " + a.title, Dialog.ModalityType.MODELESS);
+        d.getContentPane().add(sp);
+        d.pack();
+        d.setLocationRelativeTo(this);
+        d.setVisible(true);
     }
 
     /** Words to start a watch with: the story's leading key term (quoted if it's a phrase). */

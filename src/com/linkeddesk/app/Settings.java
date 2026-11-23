@@ -192,6 +192,28 @@ public final class Settings {
         p.setProperty("emailTo", to.trim());
     }
 
+    /** Search also looks inside the full texts some feeds give (FET-F07). */
+    public synchronized boolean searchFullText() { return Boolean.parseBoolean(p.getProperty("searchFullText", "true")); }
+    public synchronized void setSearchFullText(boolean b) { p.setProperty("searchFullText", Boolean.toString(b)); }
+    /** Keep the full text when a feed includes it. */
+    public synchronized boolean keepFullText() { return Boolean.parseBoolean(p.getProperty("keepFullText", "true")); }
+    public synchronized void setKeepFullText(boolean b) { p.setProperty("keepFullText", Boolean.toString(b)); }
+
+    // ---- other languages (ANL-F11)
+    /** Translate headlines of non-English articles with Claude after the daily download. */
+    public synchronized boolean translate() { return Boolean.parseBoolean(p.getProperty("translate", "true")); }
+    public synchronized void setTranslate(boolean b) { p.setProperty("translate", Boolean.toString(b)); }
+    /** At most this many articles translated a day (keeps the cost small). */
+    public synchronized int translatePerDay() {
+        try { return Math.max(0, Math.min(2000, Integer.parseInt(p.getProperty("translatePerDay", "150").trim()))); } catch (NumberFormatException e) { return 150; }
+    }
+    public synchronized void setTranslatePerDay(int n) { p.setProperty("translatePerDay", Integer.toString(Math.max(0, Math.min(2000, n)))); }
+
+    // ---- phone companion (UI-F12)
+    /** Folder (e.g. in OneDrive) where the phone briefing page is written after each daily download; "" = off. */
+    public synchronized String phoneFolder() { return p.getProperty("phoneFolder", "").trim(); }
+    public synchronized void setPhoneFolder(String f) { p.setProperty("phoneFolder", f == null ? "" : f.trim()); }
+
     // ---- archive: compression and backups (STO-F04)
     /** Compress months older than this many months (0 = never). */
     public synchronized int compressAfterMonths() {

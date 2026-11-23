@@ -19,6 +19,7 @@ public final class TestMain {
         com.linkeddesk.alerts.AlertsTest.run(c);
         com.linkeddesk.store.StorageTest.run(c);
         com.linkeddesk.export.ExportTest.run(c);
+        com.linkeddesk.feeds.MoreSourcesTest.run(c);
         System.out.println();
         System.out.println(c.passed() + " checks passed, " + c.failures().size() + " failed");
         c.failures().forEach(f -> System.out.println("  FAILED: " + f));
