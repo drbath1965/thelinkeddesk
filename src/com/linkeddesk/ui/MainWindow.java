@@ -211,6 +211,7 @@ public final class MainWindow extends JFrame implements Host {
         crossOnly.addActionListener(e -> refreshLists(null));
         unreadOnly.addActionListener(e -> refreshLists(null));
         installShortcuts();
+        installZoom();
         filter.getDocument().addDocumentListener(new DocumentListener() {
             public void insertUpdate(DocumentEvent e) { refreshLists(null); }
             public void removeUpdate(DocumentEvent e) { refreshLists(null); }
@@ -800,24 +801,78 @@ public final class MainWindow extends JFrame implements Host {
         }.execute();
     }
 
+    // ------------------------------------------------------------------ zoom (Ctrl + mouse wheel)
+
+    private int zoomTarget = -1;
+    private final Timer zoomTimer = new Timer(250, e -> applyZoom());
+
+    /** Ctrl + mouse wheel and Ctrl +/-/0 anywhere in the app change the text size (saved like the Settings choice). */
+    private void installZoom() {
+        zoomTimer.setRepeats(false);
+        Toolkit.getDefaultToolkit().getSystemEventQueue().push(new EventQueue() {
+            @Override protected void dispatchEvent(AWTEvent e) {
+                if (e instanceof java.awt.event.MouseWheelEvent w && w.isControlDown() && !w.isAltDown()) {
+                    double r = w.getPreciseWheelRotation();
+                    if (r != 0) zoomBy(r < 0 ? 1 : -1);        // wheel away from you = bigger, as in a browser
+                    return;                                    // don't scroll as well
+                }
+                if (e instanceof KeyEvent k && k.getID() == KeyEvent.KEY_PRESSED && k.isControlDown() && !k.isAltDown() && !k.isShiftDown()) {
+                    int c = k.getKeyCode();
+                    if (c == KeyEvent.VK_ADD || c == KeyEvent.VK_EQUALS || c == KeyEvent.VK_PLUS) { zoomBy(1); return; }
+                    if (c == KeyEvent.VK_SUBTRACT || c == KeyEvent.VK_MINUS) { zoomBy(-1); return; }
+                    if (c == KeyEvent.VK_0 || c == KeyEvent.VK_NUMPAD0) { zoomTo(100); return; }
+                }
+                super.dispatchEvent(e);
+            }
+        });
+    }
+
+    private void zoomBy(int dir) {
+        int now = zoomTarget > 0 ? zoomTarget : service.settings().textSize();
+        zoomTo(Theme.step(now, dir));
+    }
+
+    private void zoomTo(int pct) {
+        zoomTarget = pct;
+        status.setText("Text size " + pct + "%  (Ctrl + mouse wheel to change, Ctrl 0 for 100%)");
+        zoomTimer.restart();      // apply once the wheel stops, so the window isn't redrawn at every notch
+    }
+
+    private void applyZoom() {
+        int pct = zoomTarget;
+        zoomTarget = -1;
+        if (pct <= 0) return;
+        service.settings().reload();
+        if (pct == service.settings().textSize()) return;
+        service.settings().setTextSize(pct);
+        service.settings().save();
+        applyLook();
+        status.setText("Text size " + pct + "%");
+    }
+
+    /** Redraws everything after the colours or text size changed. */
+    private void applyLook() {
+        Theme.refreshAll(service.settings());
+        stories.refreshDetail();
+        saved.refreshDetail();
+        briefing.refreshPage();
+        map.refreshPage();
+        world.refreshPage();
+        askPanel.refreshPage();
+        watchPanel.refreshPage();
+        markets.refreshPage();
+        stories.refreshRows();
+        saved.refreshRows();
+        refreshLists(null);
+    }
+
     private void openSettings() {
         SettingsDialog d = new SettingsDialog(this, service.settings());
         d.testEmail = () -> service.emailBriefing(true);
         d.writePhone = () -> { var p = service.publishPhone(); return p == null ? "No folder chosen." : p.toString(); };
         d.setVisible(true);
         if (d.wasSaved()) stories.refreshDetail();
-        if (d.lookChanged()) {
-            Theme.refreshAll(service.settings());
-            stories.refreshDetail();
-            saved.refreshDetail();
-            briefing.refreshPage();
-            map.refreshPage();
-            world.refreshPage();
-            askPanel.refreshPage();
-            watchPanel.refreshPage();
-            markets.refreshPage();
-            refreshLists(null);
-        }
+        if (d.lookChanged()) applyLook();
     }
 
     private void showReport() {
@@ -843,6 +898,7 @@ public final class MainWindow extends JFrame implements Host {
             {"W", "Open the world map"},
             {"A", "Ask Claude about your news"},
             {"L", "Open your watchlist"},
+            {"Ctrl + mouse wheel", "Bigger or smaller text (also Ctrl + / Ctrl -; Ctrl 0 = 100%)"},
             {"?", "Show these shortcuts"},
             {"Ctrl+D / Ctrl+F / Ctrl+L / Ctrl+E", "Download / Search all news / Logs / Export what's on screen"},
     };

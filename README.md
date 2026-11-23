@@ -39,8 +39,9 @@ Opening the app a second time just brings the open window to the front.
 - **Tools > Archive and backup**: the archive's size and the search index; **compress months older than 6 months** (to about a fifth of the size, still read and searched as before; done after the daily download); **export any month as CSV** for Excel; **back up** to a folder you choose (e.g. inside OneDrive) now or automatically every week, keeping the newest 5; **restore** a backup (on this PC or a new one: what was there is moved aside into `before-restore-…`, not deleted).
 - **Tools > Calibrate linking**: how well grouping and linking score on a labelled sample of real news and on your verdicts, and **Find best settings** per desk.
 - **Tools > Words behind links**: which words create the most links; add a too-generic one to the stop words in one click. **Tools > Your corrections** lists your verdicts, desk rules and word lists (all removable).
-- **Keyboard**: J/K next/previous story, / filter or search box, S star, U mark unread, F download, B briefing, L watchlist, M map, W world map, A ask, Ctrl+E export, ? all shortcuts (Help menu).
-- **Tools > Settings > Reading**: light or dark colours, text size 90-175% (on top of Windows' display scaling, which the app follows).
+- **Keyboard**: J/K next/previous story, / filter or search box, S star, U mark unread, F download, B briefing, L watchlist, M map, W world map, A ask, Ctrl+E export, Ctrl + mouse wheel zoom, ? all shortcuts (Help menu).
+- **Zoom**: hold **Ctrl and turn the mouse wheel** anywhere in the app to make all text bigger or smaller (70-300%); **Ctrl +** / **Ctrl -** do the same and **Ctrl 0** goes back to 100%. The size is remembered.
+- **Tools > Settings > Reading**: light or dark colours, and the same text size (on top of Windows' display scaling, which the app follows).
 - **Download news now** turns into **Cancel download** while running; articles already downloaded are kept.
 
 ## Claude (optional, needs an Anthropic API key in Tools > Settings)

@@ -19,7 +19,7 @@ final class SettingsDialog extends JDialog {
     private final JPasswordField apiKey = new JPasswordField(32);
     private final JTextField model = new JTextField(20);
     private final JComboBox<String> theme = new JComboBox<>(new String[]{"Light", "Dark"});
-    private final JComboBox<String> textSize = new JComboBox<>(new String[]{"90%", "100%", "115%", "130%", "150%", "175%"});
+    private final JComboBox<String> textSize = new JComboBox<>(java.util.Arrays.stream(Theme.SIZES).mapToObj(n -> n + "%").toArray(String[]::new));
     private final JCheckBox briefing = new JCheckBox("Show the briefing when the app opens and after each daily download");
     private boolean lookChanged;
     private final JTextField budget = new JTextField(6);
@@ -57,8 +57,8 @@ final class SettingsDialog extends JDialog {
         apiKey.setText(settings.apiKey());
         model.setText(settings.model());
         theme.setSelectedIndex("dark".equalsIgnoreCase(settings.theme()) ? 1 : 0);
+        if (java.util.Arrays.stream(Theme.SIZES).noneMatch(n -> n == settings.textSize())) textSize.addItem(settings.textSize() + "%");
         textSize.setSelectedItem(settings.textSize() + "%");
-        if (textSize.getSelectedIndex() < 0) textSize.setSelectedItem("100%");
         briefing.setSelected(settings.showBriefing());
         budget.setText(String.format(java.util.Locale.ROOT, "%.2f", settings.claudeBudget()));
         digest.setSelected(settings.claudeDigest());
@@ -126,7 +126,8 @@ final class SettingsDialog extends JDialog {
         form.add(new JLabel("Text size:"), g); g.gridx = 1; form.add(textSize, g); g.gridx = 0; g.gridy++;
         g.gridwidth = 2;
         form.add(briefing, g); g.gridy++;
-        form.add(note("Text size adds to Windows' own display scaling (Settings > Display > Scale), which the app follows."), g); g.gridy++;
+        form.add(note("Text size adds to Windows' own display scaling (Settings > Display > Scale), which the app follows. "
+                + "Quicker: hold Ctrl and turn the mouse wheel anywhere in the app, or press Ctrl + / Ctrl - (Ctrl 0 goes back to 100%)."), g); g.gridy++;
 
         form.add(section("Notifications"), g); g.gridy++;
         form.add(notifications, g); g.gridy++;

@@ -244,10 +244,10 @@ public final class Settings {
 
     /** Text size in percent of normal (80-200). */
     public synchronized int textSize() {
-        try { return Math.max(80, Math.min(200, Integer.parseInt(p.getProperty("textSize", "100").trim()))); }
+        try { return Math.max(70, Math.min(300, Integer.parseInt(p.getProperty("textSize", "100").trim()))); }
         catch (NumberFormatException e) { return 100; }
     }
-    public synchronized void setTextSize(int pct) { p.setProperty("textSize", Integer.toString(Math.max(80, Math.min(200, pct)))); }
+    public synchronized void setTextSize(int pct) { p.setProperty("textSize", Integer.toString(Math.max(70, Math.min(300, pct)))); }
 
     public synchronized int windowDays() {
         try { return Integer.parseInt(p.getProperty("windowDays", "7")); } catch (NumberFormatException e) { return 7; }

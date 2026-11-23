@@ -55,6 +55,16 @@ public final class Theme {
         }
     }
 
+    /** The text sizes zoom steps through (Ctrl + mouse wheel, Ctrl +/-), in percent. */
+    static final int[] SIZES = {70, 80, 90, 100, 110, 120, 130, 140, 150, 165, 175, 200, 225, 250, 275, 300};
+
+    /** The next size up (+1) or down (-1) from {@code now}. */
+    static int step(int now, int dir) {
+        if (dir > 0) { for (int s : SIZES) if (s > now) return s; return SIZES[SIZES.length - 1]; }
+        for (int i = SIZES.length - 1; i >= 0; i--) if (SIZES[i] < now) return SIZES[i];
+        return SIZES[0];
+    }
+
     /** Re-applies the theme to every open window (after Settings changed it). */
     static void refreshAll(Settings s) {
         apply(s);
