@@ -1,0 +1,36 @@
+package com.linkeddesk.ui;
+
+import com.linkeddesk.model.StoryCluster;
+import com.linkeddesk.model.StoryLink;
+import com.linkeddesk.service.NewsService;
+
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
+
+/** What the main window offers its tabs and dialogs. */
+interface Host {
+    NewsService service();
+
+    /** "Ask Claude why" for a link. */
+    void explain(StoryCluster from, StoryLink link);
+
+    /** A job that downloads; it gets a progress callback and a cancel flag. */
+    interface DownloadJob<T> { T run(Consumer<String> progress, BooleanSupplier cancelled) throws Exception; }
+
+    /**
+     * Runs a download job in the background, one at a time, with the toolbar button turned into Cancel.
+     * {@code after} runs on the Swing thread with the result (or is skipped on failure, which is reported).
+     */
+    <T> void runDownload(String busyText, DownloadJob<T> job, Consumer<T> after);
+
+    /** New articles were saved: re-group the main view. */
+    void articlesChanged();
+
+    void status(String text);
+
+    /** Your corrections changed (link verdicts, desk rules, word lists, thresholds): regroup every view. */
+    void correctionsChanged();
+
+    /** A story was starred or unstarred: refresh the Saved tab. */
+    default void savedChanged() { }
+}

@@ -1,0 +1,189 @@
+# Labelled real-news sample for calibrating grouping and linking (ANL-F04).
+# Headlines as published in news feeds and Bing News search results, Nov 2026.
+# Opening words: the first words of each item's description where the feed gave one; for items from the Al Jazeera
+# and NPR feeds (headline only), a one-line summary written for this set.
+# Columns: event label | desk | published (UTC) | outlet | headline | opening words
+# Event label = topic.event. Articles with the same label report the same event (should be one story).
+# Stories with the same topic (part before the dot) are related (a link between them is correct).
+# Related topics are listed on "related" lines; links between any other topics are wrong.
+related	UKR	DNI
+related	DNI	SUM
+related	AI	ASIA
+related	LEB	ISR
+# ---- Belgium national strike
+BEL.strike	W	2026-11-23T03:26	BBC	Flights grounded in Belgium due to strike against austerity measures	A series of strikes have hit Belgium in recent months
+BEL.strike	W	2026-11-22T19:15	Al Jazeera	Belgium’s airports set to shut down due to anti-austerity strike	Skeyes halts air traffic control services, grounding flights at Belgian
+BEL.strike	W	2026-11-23T09:10	France 24	Airports, public transport shut down amid national strike in Belgium	Belgium's prime minister on Monday set a new year-end deadline
+BEL.strike	W	2026-11-23T07:03	Yahoo	Nationwide anti-austerity strike in Belgium disrupts flights	A nationwide strike called to protest at the austerity and
+BEL.strike	W	2026-11-22T21:00	Business Travel News Europe	Belgium flights grounded by air traffic controller strike	Flights to and from Belgium are being severely disrupted on Monday
+BEL.strike	W	2026-11-23T04:11	SBS	Belgian General Strike Against Austerity Paralyzes Air Travel as Air Traffic Controllers Join	Police officers are deployed near a burning vehicle during a protest
+BEL.strike	W	2026-11-22T16:47	Yahoo	Flights in Belgium cancelled on Monday due to one-day strike	Air traffic to and from Belgium is set to come to a virtual standstill
+BEL.strike	W	2026-11-23T05:04	Air Cargo Week	Belgium faces air cargo disruption due to general strike	Belgian airspace is facing a day of aviation disruption as a general strike
+BEL.strike	W	2026-11-22T16:00	The Brussels Times	National strike: No flights at Belgian airports, only two metro lines running in Brussels	Services across Belgium are disrupted as trade unions are taking to the streets
+BEL.strike	W	2026-11-23T05:00	ITIJ	Belgian air traffic control strike cancels flights at Brussels airports	Thousands of passengers face disruption as nationwide industrial action forces airlines
+BEL.strike	W	2026-11-22T17:50	News.az	What is behind Belgium's nationwide strike and the suspension of commercial flights?	The industrial action is expected to affect tens of thousands of passengers
+BEL.strike	W	2026-11-22T03:03	The News International	Belgium strike threatens hundreds of flights, affecting thousands of passengers	Belgium is set to experience a major air travel disruptions on Monday
+# ---- Ukraine's naval drones sink a Russian warship off Libya
+UKR.libya	W	2026-11-23T02:09	CNBC	Zelenskyy praises ‘exemplary’ drone operation that sank Russian warship in a Libyan port	The incident comes alongside a suspected Ukrainian drone strike on
+UKR.libya	W	2026-11-23T02:36	HuffPost	Ukrainian Drones Hit Russian Warship At Naval Base In Libya, Zelenskyy Says	The ship was one of Russia's newest vessels, commissioned a
+UKR.libya	W	2026-11-23T04:35	Fox News	Zelenskyy hails exemplary Ukrainian operation sinking Russian warship off Libya	Volodymyr Zelenskyy shared video of Ukraine's naval drones sinking Russia's
+UKR.libya	W	2026-11-23T04:34	CBS News	Ukraine sinks Russian warship Merkury off Libya, damages sanctioned Russian cargo ship	Ukrainian President Volodymyr Zelenskyy said his country was behind attacks
+UKR.libya	W	2026-11-22T23:38	Yahoo	Zelenskyy says Ukraine was behind drone attacks on Russian ships off Libya	President Zelenskyy says Ukrainian forces sank the Russian warship Merkury
+UKR.libya	W	2026-11-23T02:20	Euronews	Ukraine responsible for drone strikes on two Russian ships off Libya, Zelenskyy says	The attacks came after a drone hit a Russian cargo ship in the eastern Baltic Sea on Saturday,
+UKR.libya	W	2026-11-23T01:47	CBC.ca	Zelenskyy confirms Ukraine was behind attack on Russian warship off Libya	Ukraine carried out an attack on a Russian warship moored at a naval base in Libya,
+UKR.libya	W	2026-11-23T02:19	ABC News	Ukrainian naval drones sank Russia's Merkury warship in Libya, Zelenskyy confirms	Ukrainian forces also attacked a Russian cargo ship, the president said.
+UKR.libya	W	2026-11-23T08:22	Press Trust of India	Zelenskyy hails Ukraine's attack on a Russian warship docked at a naval base in Libya	Kyiv, Nov 23 (AP) Ukraine carried out an attack on a Russian warship moored at a port
+UKR.libya	W	2026-11-23T07:01	The Guardian	Ukraine confirms it used naval drones to strike two Russian ships off Libya	Ukraine's security service says seven drones were launched from mothership in operation
+UKR.libya	W	2026-11-23T00:45	Politico Europe	Ukraine sank Russian warship off Libya, Zelenskyy says	Kyiv said seven sea drones sank the corvette and hit a cargo ship, as Ukraine's war at sea spreads from the Baltic to the Mediterranean.
+UKR.libya	W	2026-11-23T04:15	Chicago Tribune	Ukrainian drones hit Russian warship at naval base in Libya, President Volodymyr Zelenskyy says	Ukraine carried out an attack on a Russian warship moored at a port in Libya,
+UKR.libya	W	2026-11-23T07:37	Al Jazeera	Zelenskyy says Ukraine behind drone attacks on Russian ships near Libya	Ukraine's president says naval drones struck a Russian warship and a cargo ship
+# ---- Russian cargo ship hit by drones in the Baltic
+UKR.baltic	W	2026-11-21T13:23	CNN	Russian ship hit by drones in Baltic still smoulders as Finland, Estonia help put out blaze	A Russian cargo ship with links to the military was
+UKR.baltic	W	2026-11-22T11:51	Yahoo	Drones hit Kaliningrad-bound Russian cargo ship as Baltic becomes a sea front	Sparta II is on the US sanctions list and has been linked
+UKR.baltic	W	2026-11-21T13:11	USA TODAY	Cargo ship bound for Russia hit by drones, Finland tightens security	The vessel, which caught fire and was drifting into Finnish
+UKR.baltic	W	2026-11-22T07:00	Barron's	Russian Cargo Ship Hit By Ukrainian Drone Towed To Home Waters	A Russian cargo ship hit by a Ukrainian drone attack
+UKR.baltic	W	2026-11-22T08:00	The Yeshiva World	BALTIC FIRE: Russian Cargo Ship Still Ablaze Off Finland After Drone Strike, Entire Crew Evacuated	A Russian cargo ship hit by drones in the Baltic
+UKR.baltic	W	2026-11-22T14:53	Independent Journal Review	Drone Strike Disables Russian Ship in Baltic Sea Near Finland	A drone attack severely damaged the Russian logistics ship Sparta
+UKR.baltic	W	2026-11-21T08:54	Reuters	Russian cargo ship hit by drones in Baltic, Finland tightens security	HELSINKI, Nov 21 (Reuters) A Russian cargo ship caught fire
+UKR.baltic	W	2026-11-23T08:46	Daily Tribune	Cargo ship hit by drone towed	The Russian cargo ship Sparta II was towed toward Russian
+UKR.baltic	W	2026-11-22T20:17	The Guardian	Ukraine war briefing: Russian cargo ship hit by drone in Baltic Sea as Finland PM says conflict 'spilling over'	Vessel erupts in flames after strike in Gulf of Finland;
+UKR.baltic	W	2026-11-22T05:53	CNBC	Russian ship hit by drones in Baltic still smolders as Finland, Estonia help put out blaze	The Finnish military has said the strike on the Sparta
+UKR.kremlin	W	2026-11-23T02:35	Reuters	Kremlin accuses Ukraine of 'terrorist activity' in Baltic after cargo ship drone strike	MOSCOW, Nov 23 (Reuters) The Kremlin on Monday accused Ukraine
+UKR.nato	W	2026-11-22T22:40	NPR	Ukraine war spilling into NATO territory	Drone strikes on Russian shipping in the Baltic have rattled Finland and Estonia
+UKR.rapper	W	2026-11-23T01:53	Al Jazeera	Poland says Russia tried to assassinate Ukrainian rapper twice	Polish prosecutors say Russian intelligence plotted to kill the musician
+UKR.drone10	W	2026-11-23T04:38	Al Jazeera	Child rescued in Ukraine after Russian drone attack kills 10	Rescuers pulled a child from rubble after a Russian drone strike
+UKR.analyst	W	2026-11-21T12:40	NPR	Military analyst Phillips O'Brien on Ukraine and Europe being left out of Trump's talks	A military analyst on why Ukraine and Europe were sidelined
+# ---- Indonesia candy factory fire (Nov 20 -> Nov 23: one event over several days)
+IDN.fire	S	2026-11-23T02:46	The New York Times	Deadly Fire Rips Through Candy Factory in Indonesia	Two days after an inferno tore through a candy factory
+IDN.fire	S	2026-11-23T00:37	mlive	24 dead in fire at candy factory in Indonesia; more missing	At least 24 people are dead after a fire at
+IDN.fire	S	2026-11-22T05:18	Fox News	Indonesia candy factory fire leaves multiple dead, dozens missing	A massive fire tore through PT Fonusa Agung Mulia's candy
+IDN.fire	S	2026-11-23T01:30	Newsday	Indonesian rescuers race to find 34 missing workers after a deadly candy factory fire	Indonesian rescuers are searching for 34 missing workers after a
+IDN.fire	S	2026-11-21T20:15	Associated Press News	Indonesia candy factory fire leaves 3 workers dead and 37 others unaccounted for	A fire has swept through a candy factory in Indonesia's
+IDN.fire	S	2026-11-22T19:40	Yahoo	Three dead, dozens missing after fire rips through Milkita candy factory in Indonesia	While an official cause is yet to be established, surviving
+IDN.fire	S	2026-11-23T08:05	The Manila Times	More bodies recovered from Indonesia candy factory	JAKARTA — Rescue teams searching for 34 missing workers after a
+IDN.fire	S	2026-11-23T00:18	AOL	Indonesia candy factory fire kills 24 as rescuers hunt for 34 missing workers	Rescuers searched Monday for 34 missing workers after a deadly
+IDN.fire	S	2026-11-22T23:49	Reuters	Indonesia rescuers search for 36 missing after factory fire kills 3	JAKARTA, Nov 22 (Reuters) - Rescuers in Indonesia were searching
+IDN.fire	S	2026-11-22T23:30	NDTV	Indonesia Candy Factory Fire | 24 Body Bags, 30 Workers Still Missing In Indonesia	A total of 24 body bags have been recovered and
+IDN.fire	S	2026-11-20T16:00	The Boston Globe	Fire at Indonesian candy factory leaves 3 dead, dozens of workers unaccounted for	JAKARTA, Indonesia (AP) A fire swept through a candy factory
+IDN.fire	S	2026-11-23T02:35	Al Jazeera	Indonesia confirms 24 killed in candy factory fire as search continues	Indonesian police have removed 24 body bags from the factory site
+# ---- COP31 climate talks collapse
+COP.collapse	S	2026-11-23T02:13	CNBC	‘Worst COP ever’: Climate talks collapse after draft deal fails to include fossil fuels	Governments and campaigners rejected the 'cover decision' drafted at the
+COP.collapse	S	2026-11-23T09:04	Latin Times	COP31 Ends Without Agreement After EU Rejects Pact Missing Fossil Fuel Language	COP31 in Antalya ended without consensus after the EU and
+COP.collapse	S	2026-11-23T07:28	The Mercury News	Analysis: The collapse of UN climate talks, over fossil fuels, was years in the making	Going into this year's U.N. climate talks in Turkey, expectations
+COP.collapse	S	2026-11-22T06:10	CNN	Global climate summit collapses as countries fail to agree on moving away from fossil fuels	The COP31 climate conference in Antalya, Turkey, collapsed Sunday as
+COP.collapse	S	2026-11-22T01:09	BBC	COP31 climate talks end with no deal after fossil fuels row derails hopes of agreement	Several countries and the EU rejected the deal over its
+COP.collapse	S	2026-11-23T09:15	Business Standard	Failure of COP31 talks exposes hard limits of climate cooperation	COP31 ended without a final declaration after disagreements over fossil
+COP.collapse	S	2026-11-22T09:11	CBC.ca	COP31 climate talks collapse after member states reject deal for not mentioning fossil fuels	Climate talks collapsed on Sunday at COP31 in Turkey, ending
+COP.collapse	S	2026-11-22T05:20	NBC News	COP31 climate talks break down after angry dispute over fossil fuels	Climate action talks in Turkey broke down Sunday after the
+COP.collapse	S	2026-11-22T10:17	BBC News	COP31 climate talks fail to reach major deal amid deep divisions	COP31 climate talks fail to make breakthrough on tackling climate
+COP.collapse	S	2026-11-23T06:35	Associated Press News	COP31 climate talks collapse without a deal - what happens now?	For the first time since 2009, a U.N. climate summit
+COP.collapse	S	2026-11-23T02:16	Outlook India	Saudi Arabia Accused Of ‘Hijacking’ COP31 Talks To Block Fossil Fuel Phase-Out Deal	COP31 climate summit 2026 ends without a deal as Saudi
+COP.collapse	S	2026-11-22T04:56	Yahoo	Cop31 talks collapse over fossil fuels row	Cop31 climate talks have collapsed after the European Union accused
+COP.collapse	S	2026-11-22T16:33	NPR	Climate change talks fall apart in final hours over fossil fuels	Negotiators in Antalya failed to agree on language about fossil fuels
+# ---- AI stocks
+ASIA.tumble	F	2026-11-22T16:18	Al Jazeera	Asian stock markets tumble as AI bubble fears mount	South Korea's stock market has opened to sharp losses as
+ASIA.tumble	F	2026-11-23T04:39	Free Press Kashmir	Asian stocks tumble as AI bubble fears mount, Wall Street futures point to rebound	Asian shares declined on Monday as worries resurfaced about whether
+ASIA.tumble	F	2026-11-23T00:31	The News International	Asian stock markets tumble as AI bubble fears hammer Samsung, SK Hynix, and Chipmakers	Asian stock markets fell sharply on Monday, November 23, 2026,
+ASIA.tumble	F	2026-11-22T19:48	International Business Times AU	Why Is the Kospi Collapsing? AI Bubble Fears, Foreign Selling and a Memory Chip Profit Cliff Drive the Rout	South Korea's Kospi has fallen 48.2% from its 2026 high
+ASIA.dive19	F	2026-11-19T18:54	Al Jazeera	Asia's stock markets dive as Anthropic debut fails to allay AI bubble fears	Indexes in Japan, South Korea, Taiwan and Hong Kong fall
+ASIA.wipeout	F	2026-11-20T08:00	The Coin Republic	Is the AI Bubble Exploding? Asian Chip Giants Suffer $190B Wipeout	AI bubble fears deepen as Asian chip giants lose $190
+ASIA.china	F	2026-11-18T04:01	How Money Works	China's AI stock market lost $480 billion in 4 months - why America's AI bubble hasn't burst	China and South Korea have experienced sharp declines in AI-related
+AI.forbes	F	2026-09-28T11:22	Forbes	What Could Pop The AI Bubble And Which Stocks Stand To Lose	Forbes contributors publish independent expert analyses and insights.
+AI.cfr	F	2026-11-19T06:52	Council on Foreign Relations	Boom or Bubble? Understanding AI and the U.S. Economy	Investments in artificial intelligence (AI) have powered much of the
+AI.chips	F	2026-11-20T10:06	Seeking Alpha	What AI Bubble? Chips Exports Have Overtaken Oil For The First Time In History	Analyst rates Nasdaq 100 a Strong Buy: below 18x forward
+AI.selloff	F	2026-11-21T03:03	SBS	Stocks tumble as AI bubble fears prompt market sell-off, with Anthropic shares falling	AI firm Anthropic's share price has fallen close to its initial
+AI.selloff	F	2026-11-22T00:39	note	Anthropic shares plunge day after IPO, NVIDIA down 14% amid expanding China restrictions	Shares of the newly listed Anthropic plunged to near their offering price
+AI.rally	F	2026-11-23T06:32	The Wall Street Journal	Stock futures rally as dust settles after AI-driven selloff	Nasdaq futures jumped and Nvidia stock surged premarket after the
+AI.rally	F	2026-11-23T08:32	Investor's Business Daily	Anthropic stock slips, misses out on AI rally following Jensen Huang's Nvidia comeback	Anthropic stock is left out of the broader AI stock rally
+AI.rally	F	2026-11-23T08:32	Decrypt	Bitcoin Rallies, Anthropic Sinks as Nvidia Surges 35% on Jensen Huang’s Return	Nvidia’s comeback sent chip shares soaring and gave Bitcoin a lift
+AI.rally	F	2026-11-23T01:17	CNBC	Anthropic, Nvidia shares rise in premarket trading after major tech sell-off	The Nasdaq slid 10% last week in its worst week since the
+AI.rally	F	2026-11-23T04:12	Hindustan Times	Anthropic and Nvidia shares jump in premarket trading as AI stocks rebound after Nasdaq's worst week since 2020	Anthropic and Nvidia shares jump in premarket trading as AI stocks
+AI.rally	F	2026-11-23T06:51	Yahoo Finance	Anthropic Shares Churn, Defying AI Trade Rally on Huang’s Return	Anthropic PBC shares struggled for direction in early Monday trading,
+AI.rally	F	2026-11-23T02:52	CoinCentral	Nvidia, Anthropic and Alphabet Shares Bounce Back as Investors Buy the Dip	Nvidia, Anthropic and Alphabet shares rose in premarket trading Monday
+AI.rally	F	2026-11-23T09:14	Politico	Nvidia stock soars after Huang’s reinstatement	Nvidia’s stock shot up more than 30% on Monday following the
+AI.wood	F	2026-11-20T08:19	The Motley Fool	Buy Anthropic, Sell Nvidia? Cathie Wood Just Did.	Where things get interesting is the selling of Nvidia. Anthropic
+AI.wood	F	2026-11-20T06:52	24/7 Wall St.	Cathie Wood Sold Nvidia and Bought $78 Million of Anthropic at IPO	Cathie Wood trimmed a chip giant with record profits to
+AI.value	F	2026-11-23T03:15	The Motley Fool	Anthropic Is Worth $1.2 Trillion. Is It a Better Buy Than Nvidia?	Anthropic just completed the largest initial public offering of all time,
+AI.ipo	F	2026-11-18T14:11	TechCrunch	Anthropic reportedly prices IPO at $83 a share, above projected range	Anthropic has reportedly priced its long-awaited IPO at $83 per share,
+# ---- Ebola in DR Congo
+EBO.fighting	S	2026-11-22T12:17	Reuters	WHO chief says fighting near Congo Ebola outbreak area disrupts response efforts	Nov 22 (Reuters) World Health Organization chief Tedros Adhanom Ghebreyesus
+EBO.fighting	S	2026-11-23T08:53	realnewsmagazine	WHO chief says fighting disrupts Congo Ebola response	WORLD Health Organisation (WHO) chief Tedros Adhanom Ghebreyesus said heavy
+EBO.fighting	S	2026-11-22T16:39	Al Jazeera	WHO chief calls for peace amid heavy fighting in Ebola-hit DR Congo region	Fighting near a DRC hospital disrupts Ebola efforts, putting patients
+EBO.fighting	S	2026-11-23T05:06	UN News	Heavy fighting in Ituri traps DR Congo Ebola responders: WHO	Heavy fighting near a hospital in Ituri province in the
+EBO.fighting	S	2026-11-23T00:42	Bastille Post	Intensified conflict in DR Congo disrupts Ebola relief efforts, endangers frontline personnel: WHO Chief	World Health Organization (WHO) Director-General Tedros Adhanom Ghebreyesus warned on
+EBO.fighting	S	2026-11-22T18:38	The Manila Times	WHO chief pleads for peace in Ebola-hit DR Congo area	GENEVA, Switzerland The head of the World Health Organization on
+EBO.fighting	S	2026-11-22T23:23	Arise News	WHO Sounds Alarm As Fighting Disrupts Ebola Response In Eastern DR Congo	Medical workers were forced to shelter inside a maternity ward
+EBO.fighting	S	2026-11-22T18:45	Independent Journal Review	DRC Fighting Disrupts Ebola Response, Traps Health Workers	WHO chief Tedros Adhanom Ghebreyesus called for peace as heavy
+EBO.record	S	2026-11-17T02:17	Miami Herald	Congo's Ebola outbreak is spreading and killing at a record pace	The Ebola outbreak in eastern Democratic Republic of Congo remains
+EBO.sep2	S	2026-09-02T09:04	Yahoo	WHO's Tedros says Ebola response must be scaled up to tackle Congo outbreak	The head of the World Health Organization said the response must grow
+EBO.sep16	S	2026-09-16T07:31	11Alive	WHO sees 'encouraging signs' in Congo Ebola fight, but warns cases in one eastern region are surging	GENEVA(AP) The head of the U.N. health agency is hailing
+# ---- Xi-Trump-Putin summit plans (early Nov) and its outcome
+SUM.talks	W	2026-11-06T14:52	Associated Press News	China confirms discussions are underway on a historic Xi-Trump-Putin meeting	Beijing has confirmed for the first time that it is
+SUM.talks	W	2026-11-06T18:15	Newspoint	Xi, Trump, and Putin may hold historic trilateral summit in China	In what could emerge as the most consequential diplomatic convergence
+SUM.talks	W	2026-11-06T05:49	Al Jazeera	What a Trump-Xi-Putin summit could mean – and what it wouldn’t	A Trump-Xi-Putin meeting at APEC would be a coup for
+SUM.talks	W	2026-11-06T16:00	Yahoo News Australia	China in talks to host historic meeting between Xi, Putin and Trump	China has confirmed that it is discussing a historic meeting
+SUM.talks	W	2026-11-04T08:52	Outlook India	China Confirms Trump-Putin-Xi Meeting At APEC Summit in Shenzhen	China said it is in contact with the US and
+SUM.talks	W	2026-11-06T16:00	NewsBytes	China arranging Shenzhen meeting Xi Jinping, Donald Trump, Vladimir Putin	China has confirmed discussions are underway for a potential historic
+SUM.talks	W	2026-11-06T04:28	The New York Times	A Trump-Putin-Xi Summit? That Might Be Awkward for One of Them.	A summit could bolster Xi Jinping’s stature. But talks about
+SUM.talks	W	2026-11-06T22:42	The Guardian	Ukraine war briefing: Beijing confirms historic Xi-Trump-Putin meeting under discussion	Russia could use tri leader summit to nudge China and
+SUM.talks	W	2026-11-06T23:21	Firstpost	Trump, Xi and Putin may hold historic trilateral meeting in China this month	Beijing seeks trilateral photo opportunity as experts warn clashing interests
+SUM.talks	W	2026-11-06T16:00	Yahoo Malaysia	China confirms discussions underway on historic Xi-Trump-Putin meeting
+SUM.talks	W	2026-11-06T18:57	The Hindu	China says discussions underway on Xi-Trump-Putin meeting	China confirms talks on a Xi-Trump-Putin trilateral meeting on the
+SUM.sanctions	W	2026-11-06T20:09	South China Morning Post	China airs serious concern over US sanctions ahead of Xi, Trump APEC meeting in Shenzhen	China's Ministry of Commerce said on Saturday it 'firmly opposes'
+SUM.result	W	2026-11-21T22:01	NPR	What did Xi Jinping get from the bear hug with Trump at the Shenzhen summit?	The Chinese leader came away from the Shenzhen summit with
+# ---- US intelligence chief on Trump calling Putin a friend
+DNI.friend	P	2026-11-23T00:09	Yahoo	Donald Trump’s Putin ‘Friend’ Remark Grabs Attention of US Intelligence Chief	Donald Trump’s description of Vladimir Putin as a “friend” has
+DNI.friend	P	2026-11-23T08:58	PRIMETIMER	Trump’s ‘My Friend’ comment about Putin sparks debate as intelligence chief Jay Clayton calls it ‘entirely appropriate'	US intelligence chief Jay Clayton defends Donald Trump’s decision to
+DNI.friend	P	2026-11-23T06:20	The Press Democrat	US intelligence chief says Trump’s description of Putin as a ‘friend’ is ‘entirely appropriate’	Director of National Intelligence Jay Clayton said Sunday it was
+DNI.friend	P	2026-11-22T08:46	Reuters	US intelligence chief says Putin is 'not America's friend in Ukraine'	By John Kruzel WASHINGTON, Nov 22 (Reuters) - Russian President Vladimir Putin
+DNI.friend	P	2026-11-22T18:23	Al Jazeera	US intelligence chief defends Trump’s comments calling Putin his ‘friend’	US Director of National Intelligence Jay Clayton says Trump’s comments
+DNI.friend	P	2026-11-22T12:56	The Guardian	US intelligence chief says he trusts Trump’s description of Putin as ‘my friend’	Jay Clayton was pressed on Trump’s characterization of Putin during
+DNI.friend	P	2026-11-22T07:59	Politico	Director of National Intelligence defends Trump’s calling Putin ‘friend’	Jay Clayton said he “completely” trusts President Donald Trump.
+DNI.friend	P	2026-11-22T06:08	ABC News	DNI Clayton: Putin is ‘not America’s friend in Ukraine’	The director of national intelligence appeared on ABC's "This Week"
+DNI.friend	P	2026-11-22T16:27	Meduza	‘He is not America’s friend in Ukraine. Not at all’: U.S. intelligence chief responds to Trump calling Putin his ‘friend’	U.S. Director of National Intelligence Jay Clayton spoke to ABC
+DNI.friend	P	2026-11-23T04:02	Associated Press News	Live updates: US intelligence chief says Trump’s description of Putin as a ‘friend’ is ‘entirely appropriate’	US intelligence chief says Trump’s description of Putin as a ‘friend’ is
+DNI.friend	P	2026-11-22T12:02	Hindustan Times	US intelligence chief says Putin is not America's friend, but defends Trump's remark	Jay Clayton said it was "entirely appropriate" for Trump to call Putin
+DNI.friend	P	2026-11-23T02:26	hromadske	US intelligence chief says Putin is 'not America's friend in Ukraine' after Trump's 'My Friend' post	Russian President Vladimir Putin is "not America's friend in Ukraine," US Director
+# ---- Lebanon and the Israeli army
+LEB.return	W	2026-11-22T09:44	NPR	Lebanese villagers return to wrecked homes as the Israeli army pulls back	In a pilot project in a village in southern Lebanon,
+LEB.return	W	2026-11-21T22:01	NPR	A grieving family in Lebanon returns to their village	A family returns to its southern Lebanon village after the Israeli army pulled back
+LEB.school	W	2026-11-22T16:00	Anadolu Agency	Lebanese prime minister accuses Israeli army of exploiting schoolchildren to ‘whitewash’ occupation	Nawaf Salam calls for continued international presence in south after
+LEB.school	W	2026-11-22T20:56	UA.NEWS	Lebanese PM Salam accuses Israeli army of using schoolchildren — Anadolu Agency	Lebanese Prime Minister Nawaf Salam accused the Israeli army of
+LEB.school	W	2026-11-23T00:00	Israel Today	Female IDF officer visits school in Lebanon, sparking outcry from Beirut	A visit by the Arabic-speaking spokesperson of the Israeli army
+LEB.tunnel	W	2026-11-18T03:24	L'Orient Today	Israeli army says it destroyed tunnel in Shebaa area, outside occupied buffer zone	The Israeli army announced on Wednesday that it had destroyed
+LEB.annex	W	2026-06-28T15:01	The Times of Israel	Annex in Israel-Lebanon deal conditions further IDF withdrawals on results, not time	The Israel-Lebanon framework agreement signed last week conditions future IDF
+LEB.hezbollah	W	2026-11-09T12:06	FDD's Long War Journal	IDF finds weapons stockpiles, Hezbollah military site near UN posts in south Lebanon	Israeli forces found weapons stockpiles and a Hezbollah military-use apartment
+LEB.demolish	W	2026-11-23T01:43	Al Jazeera	Israeli forces continue house demolitions in southern Lebanon	Israeli troops are demolishing houses in villages of southern Lebanon
+ISR.medics	W	2026-11-23T05:38	Al Jazeera	Israeli attacks on medics in occupied West Bank surge by 350%: Rights group	A rights group says Israeli attacks on medical workers in the West Bank have surged
+# ---- Spain's snap election
+ES.leaders	P	2026-11-23T05:03	Agence France-Presse	The leaders vying for power in Spain's snap election	Three party leaders are vying in Spain's general election on
+ES.feijoo	P	2026-11-22T21:51	Al Jazeera	Who is Alberto Feijoo, the conservative seeking to become Spain's new PM?	The former career civil servant hopes to lead his Popular
+ES.polls	P	2026-11-23T09:04	Latin Times	Spain Votes November 29 as PP Leads and Latin American Workers Reach 1.35 Million	With one week before Spain's snap election, the PP leads
+ES.sanchez	P	2026-11-22T23:00	Malay Mail	Spain on a knife-edge: Sanchez fights for survival as far right eyes path to power	Socialist Prime Minister Pedro Sanchez seeks to thwart grim polls
+ES.debate	P	2026-11-20T09:36	Reuters	Spanish PM Sanchez's conservative rival wins TV face-off, polls show	By David Latona MADRID, Nov 20 (Reuters) Alberto Nunez Feijoo
+ES.cis	P	2026-11-23T06:30	The Rio Times	State Poll Puts Spain's Socialists 9.7 Ahead	Spain's state pollster CIS puts the Socialists at 34.4%, 9.7
+ES.polls	P	2026-11-23T05:04	Reuters	Spain's right set to win majority despite Socialist gains, polls show	MADRID, Nov 23 (Reuters) Spain's two main right-wing parties appear
+ES.debate	P	2026-11-20T07:29	The Rio Times	Polls Say Spain’s Opposition Won TV Debate	Post-debate polls favour Feijóo 64% to 32% and 45.2% to
+ES.debate	P	2026-11-19T16:13	Bloomberg	Spain’s Sánchez Struggles in Debate Against Main Rival Feijóo	Spanish Prime Minister Pedro Sánchez sought to brush off attacks
+ES.gamble	P	2026-11-22T06:01	The Independent	Has Pedro Sanchez’s election gamble opened the door for the far-right?	Spain’s snap election was a huge political gamble. Has Pedro
+ES.issues	P	2026-11-23T07:47	The Local	Key issues in Spain's snap general election	Spain's Pedro Sánchez, a darling of the international left, puts his eight-year premiership
+ES.migrants	P	2026-11-18T17:57	The News & Observer	Analysis-Migrants fuelled Spain's boom - now investors fear an anti-immigration government could stifle economy	Rapid immigration helped turn Spain into one of Europe's biggest
+# ---- Other single stories from the Al Jazeera and NPR world feeds (should stay separate, unlinked to the above)
+X.sudan	S	2026-11-23T08:53	Al Jazeera	Widowed amid war and displacement: Sudanese mothers struggle to survive	Sudanese women who lost husbands in the war describe life in displacement camps
+X.protests	W	2026-11-23T08:08	Al Jazeera	Europe’s hot autumn of protests is a symptom of economic breakdown	Strikes and protests across Europe point to deeper economic strain
+X.taliban	S	2026-11-23T07:47	Al Jazeera	Taliban deploys police to protect Afghanistan’s vanishing forests	Afghan authorities have sent police to guard forests from illegal logging
+X.motogp	W	2026-11-23T07:19	Al Jazeera	MotoGP maestro Marquez makes history with eighth premier-class world title	Marc Marquez won his eighth premier-class title at the Portugal Grand Prix
+X.cricket	W	2026-11-23T07:07	Al Jazeera	India-Pakistan cricket fans want ‘dirty politics’ kept out of beloved sport	Fans of India and Pakistan cricket say politics is spoiling the rivalry
+X.ireland	W	2026-11-23T06:47	Al Jazeera	How Ireland resisted British rule through sport	Gaelic games became a form of resistance to British rule in Ireland
+X.farright	W	2026-11-23T06:44	Al Jazeera	Is the global far right really in retreat?	Recent elections suggest a mixed picture for far-right parties worldwide
+X.alcaraz	W	2026-11-23T06:15	Al Jazeera	Alcaraz storms past world number one Zverev to win maiden ATP Finals title	Carlos Alcaraz beat Alexander Zverev in Turin to win the ATP Finals
+X.syria	W	2026-11-23T06:08	Al Jazeera	As Syria-EU talks progress, diplomats fear focus will be on repatriation	Talks between Syria and the European Union are moving forward
+X.nzcricket	W	2026-11-23T05:58	Al Jazeera	New Zealand’s Mitchell, Phillips frustrate India as first Test ends in draw	New Zealand batters held on as the first Test against India ended in a draw
+X.liverpool	W	2026-11-23T03:52	Al Jazeera	Pochettino’s nightmare start as Man U thrashed by Liverpool	Manchester United lost heavily to Liverpool in Mauricio Pochettino's first game
+X.concert	W	2026-11-23T03:25	Al Jazeera	Don Toliver concert chaos after ‘substance’ let off in crowd	A substance released in the crowd caused panic at a Don Toliver concert
+X.iowa	P	2026-11-23T02:09	Al Jazeera	‘Extremely concerning’: Inside a US Army plan to detonate Iowa lead stores	A US Army plan to destroy stores of lead in Iowa has alarmed residents
+X.benghazi	W	2026-11-23T01:51	Al Jazeera	Libya’s military says ‘fully prepared’ after Benghazi attacks	Libya's eastern military says it is ready after attacks in Benghazi
+X.kushner	W	2026-11-22T22:39	NPR	Luxury development planned on land some Albanians say is theirs, not Jared Kushner's	Albanian villagers dispute ownership of land for a Kushner-backed resort
+X.southamerica	W	2026-11-21T22:01	NPR	Highlights and challenges from covering an historic month in South America	A correspondent looks back on a month of reporting in South America
+X.cartel	W	2026-11-21T18:08	NPR	Cartel leader captured in northern Mexico in a bloody firefight that left 11 dead	Mexican forces captured a cartel boss in a firefight that left 11 dead
+X.robots	T	2026-11-21T14:18	NPR	Killer robots: U.N. talks fall short of hopes for legally binding rules	United Nations talks on autonomous weapons ended without binding rules
