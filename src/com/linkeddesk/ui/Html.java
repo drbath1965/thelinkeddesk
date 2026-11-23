@@ -24,6 +24,7 @@ final class Html {
         return "body{font-family:'Segoe UI',Arial,sans-serif;font-size:" + Theme.pt(11) + ";margin:10px;color:" + Theme.fg() + ";background:" + Theme.bg() + "}"
             + "h1{font-family:Georgia,serif;font-size:" + Theme.pt(17) + ";margin:4px 0 6px 0}"
             + "h2{font-family:Georgia,serif;font-size:" + Theme.pt(13) + ";margin:14px 0 4px 0;border-bottom:1px solid " + Theme.rule() + "}"
+            + "a.hl{color:" + Theme.fg() + ";text-decoration:none}.read{margin:2px 0 10px 0;font-size:" + Theme.pt(10.5) + "}.read a{font-weight:bold}"
             + ".meta{color:" + Theme.muted() + ";font-size:" + Theme.pt(9.5) + "}.tag{font-size:" + Theme.pt(9) + ";font-weight:bold}"
             + ".terms{color:" + Theme.note() + ";font-size:" + Theme.pt(9.5) + "}.sum{margin:4px 0 8px 0}"
             + "a{color:" + Theme.link() + "}td{vertical-align:top;padding:3px 4px}"
@@ -93,8 +94,21 @@ final class Html {
               .append(" · <a href='unread:'>Mark unread</a> · <a href='watch:'>Watch this subject…</a> · <a href='copy:'>Copy</a> · <a href='export:'>Export…</a></span>");
             if (x.newSinceRead()) sb.append(" <span class='new'>new coverage since you read it</span>");
         }
-        sb.append("<h1>").append(hl.apply(c.headline)).append("</h1>");
-        if (!c.summary.isEmpty()) sb.append("<p class='sum'>").append(hl.apply(c.summary)).append("</p>");
+        // The headline opens the article, and a plain "Read it at …" link sits right under it.
+        Article lead = com.linkeddesk.alerts.EmailDigest.lead(c);
+        boolean web = lead.url.startsWith("http://") || lead.url.startsWith("https://");
+        sb.append("<h1>").append(web ? "<a class='hl' href='" + esc(lead.url) + "'>" + hl.apply(c.headline) + "</a>" : hl.apply(c.headline)).append("</h1>");
+        String summary = c.summary;
+        if (summary.isEmpty()) for (Article a : c.articlesNewestFirst()) if (!a.summary.isEmpty()) { summary = a.summary; break; }
+        if (!summary.isEmpty()) sb.append("<p class='sum'>").append(hl.apply(summary)).append("</p>");
+        if (web) {
+            sb.append("<p class='read'><a href='").append(esc(lead.url)).append("'>Read it at ").append(esc(lead.source))
+              .append(lead.kindLabel().isEmpty() ? "" : " (" + lead.kindLabel().toLowerCase() + ")").append(" &#8599;</a>");
+            if (c.sourceCount() > 1) sb.append(" <span class='meta'>· or one of the ").append(c.sourceCount() - 1).append(" other outlets under Coverage below</span>");
+            sb.append("</p>");
+        }
+        if (summary.isEmpty())
+            sb.append("<p class='meta'>").append(esc(lead.source)).append("'s feed gives only the headline, not a summary. Open the article to read it.</p>");
         if (x != null && x.spread() != null) sb.append(spread(c, x.spread()));
         if (!c.keyTerms.isEmpty()) {
             sb.append("<p class='terms'>Key terms: ").append(esc(String.join(", ", c.keyTerms.subList(0, Math.min(8, c.keyTerms.size()))))).append("</p>");
