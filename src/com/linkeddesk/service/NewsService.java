@@ -684,6 +684,11 @@ public final class NewsService {
 
     /** Finds the saved stories that best match a question (all history unless the question names a time). */
     public List<StoryCluster> findForQuestion(String question, int[] searched) throws IOException {
+        return findForQuestion(question, searched, com.linkeddesk.ai.ArchiveQA.MAX_STORIES);
+    }
+
+    /** The stories that best match a question or subject, at most {@code max}, oldest first. */
+    public List<StoryCluster> findForQuestion(String question, int[] searched, int max) throws IOException {
         Analyzer.Options opt = options();
         java.util.LinkedHashSet<String> terms = new java.util.LinkedHashSet<>();
         for (var t : com.linkeddesk.analysis.Text.tokens(question, opt.lexicon())) terms.add(t.term());
@@ -743,7 +748,7 @@ public final class NewsService {
         stories.sort(Comparator.comparingDouble((StoryCluster c) -> best.get(c)).reversed()
                 .thenComparing(Comparator.comparingInt(StoryCluster::sourceCount).reversed())
                 .thenComparing(Comparator.comparingLong((StoryCluster c) -> c.lastSeen).reversed()));
-        if (stories.size() > com.linkeddesk.ai.ArchiveQA.MAX_STORIES) stories = new ArrayList<>(stories.subList(0, com.linkeddesk.ai.ArchiveQA.MAX_STORIES));
+        if (stories.size() > max) stories = new ArrayList<>(stories.subList(0, max));
         stories.sort(Comparator.comparingLong(c -> c.firstSeen));   // oldest first reads like a story
         return stories;
     }
@@ -761,6 +766,91 @@ public final class NewsService {
         else if (q.contains("last month")) from = d.minusDays(62);
         else if (q.contains("this year")) from = d.withDayOfYear(1);
         return from == null ? 0 : from.atStartOfDay(z).toInstant().toEpochMilli();
+    }
+
+    // ------------------------------------------------------------------ explainers (AI-F08)
+
+    private com.linkeddesk.store.ExplainerStore explainers;
+
+    public synchronized com.linkeddesk.store.ExplainerStore explainers() {
+        if (explainers == null) explainers = new com.linkeddesk.store.ExplainerStore(AppPaths.home().resolve("explainers"));
+        return explainers;
+    }
+
+    /** What an explainer will read and cost, shown before anything is sent. */
+    public record ExplainPlan(String subject, com.linkeddesk.ai.Explainer.Level level, java.util.Map<String, Article> refs, String prompt,
+                              double estimate, boolean cached, double spent, double budget, com.linkeddesk.ai.Explainer.Result previous) {
+        public int articles() { return refs.size(); }
+        public int outlets() { java.util.Set<String> s = new java.util.HashSet<>(); for (Article a : refs.values()) s.add(a.source); return s.size(); }
+        public long from() { return refs.values().stream().mapToLong(a -> a.published).min().orElse(0); }
+        public long to() { return refs.values().stream().mapToLong(a -> a.published).max().orElse(0); }
+        public int newSincePrevious() { return previous == null ? 0 : (int) refs.values().stream().filter(a -> a.fetched > previous.created()).count(); }
+    }
+
+    public static final int EXPLAIN_MIN_ARTICLES = 3;
+
+    /**
+     * Gathers the articles for an explainer of {@code subject}: from {@code seed} stories when given (a story, a
+     * topic, a watch, search results), otherwise by searching the whole archive for the subject.
+     */
+    public ExplainPlan planExplainer(String subject, List<StoryCluster> seed, com.linkeddesk.ai.Explainer.Level level) throws IOException {
+        subject = subject == null ? "" : subject.strip();
+        if (subject.isEmpty()) throw new IllegalArgumentException("Type a subject to explain (for example \"Golden Dome\" or \"Strait of Hormuz\").");
+        List<StoryCluster> stories = seed != null && !seed.isEmpty() ? seed : findForQuestion(subject, new int[1], 40);
+        java.util.function.Function<Article, String> full = store::fullText;
+        var refs = com.linkeddesk.ai.Explainer.select(stories, level.maxArticles, full);
+        if (refs.size() < EXPLAIN_MIN_ARTICLES)
+            throw new IllegalStateException("Only " + refs.size() + (refs.size() == 1 ? " article" : " articles") + " about \"" + subject
+                    + "\" were found, which isn't enough to piece together. Try broader words, or Search live news first.");
+        var previous = explainers().latest(subject);
+        String prompt = com.linkeddesk.ai.Explainer.prompt(subject, refs, full, level, previous);
+        var c = claude();
+        return new ExplainPlan(subject, level, refs, prompt, c.estimate(prompt, level.maxTokens), c.isCached("explainer", prompt, level.maxTokens),
+                c.spentThisMonth(), c.budget(), previous);
+    }
+
+    /** Explainers made in the last 3 days (newest first, one per subject, at most 3), for the phone briefing. */
+    public List<com.linkeddesk.ai.Explainer.Result> recentExplainers() {
+        long since = System.currentTimeMillis() - 3 * 86_400_000L;
+        List<com.linkeddesk.ai.Explainer.Result> out = new ArrayList<>();
+        java.util.Set<String> keys = new java.util.HashSet<>();
+        for (var r : explainers().all()) if (r.created() >= since && keys.add(r.key()) && out.size() < 3) out.add(r);
+        return out;
+    }
+
+    /** Sends the plan to Claude, saves the explainer and returns it. */
+    public com.linkeddesk.ai.Explainer.Result runExplainer(ExplainPlan plan) throws Exception {
+        String reply = claude().ask("explainer", plan.prompt(), plan.level().maxTokens);
+        var r = com.linkeddesk.ai.Explainer.parse(plan.subject(), plan.level(), System.currentTimeMillis(), reply,
+                com.linkeddesk.ai.Explainer.sources(plan.refs()), plan.previous() == null ? 0 : plan.previous().created(), List.of());
+        if (r.isEmpty()) throw new IllegalStateException("Claude's answer couldn't be read as an explainer; nothing was saved. Try again.");
+        explainers().save(r);
+        return r;
+    }
+
+    /** "Explain it more simply" ({@code point} null) or "Go deeper on this point": added to the explainer and saved. */
+    public com.linkeddesk.ai.Explainer.Result explainMore(com.linkeddesk.ai.Explainer.Result r, String point) throws Exception {
+        String prompt, label;
+        int max;
+        if (point == null) { prompt = com.linkeddesk.ai.Explainer.simplerPrompt(r); label = "More simply"; max = 500; }
+        else {
+            java.util.Map<String, Article> arts = new java.util.LinkedHashMap<>();
+            long oldest = r.refs().values().stream().mapToLong(com.linkeddesk.ai.Explainer.Source::published).min().orElse(0);
+            try { store.ensureLoaded(oldest - 86_400_000L); } catch (IOException ignored) { }
+            for (var e : r.refs().entrySet()) {
+                var s = e.getValue();
+                Article a = store.get(s.id());
+                arts.put(e.getKey(), a != null ? a : new Article(s.id(), s.url(), s.title(), "", s.source(), Category.WORLD, s.published(), s.published()));
+            }
+            String plain = com.linkeddesk.ai.Explainer.TAG.matcher(point).replaceAll("").strip();
+            prompt = com.linkeddesk.ai.Explainer.deeperPrompt(r, plain, arts, store::fullText);
+            label = "More on: " + (plain.length() > 90 ? plain.substring(0, 90) + "…" : plain);
+            max = 700;
+        }
+        String text = com.linkeddesk.ai.Explainer.clean(claude().ask("explainer-more", prompt, max), r.refs());
+        var out = r.withFollowUp(new com.linkeddesk.ai.Explainer.FollowUp(label, text));
+        explainers().save(out);
+        return out;
     }
 
     /** Answers a question from your archive with Claude, citing the stories. Claude isn't asked if nothing matches. */
@@ -921,7 +1011,7 @@ public final class NewsService {
             if (!l.isEmpty()) watchNew.put(w.name(), l);
         }
         java.nio.file.Path out = com.linkeddesk.export.PhonePage.write(java.nio.file.Path.of(settings.phoneFolder()), java.time.LocalDate.now(),
-                (earlier, inDays) -> com.linkeddesk.export.PhonePage.build(b, d, reg, watchNew, earlier, inDays));
+                (earlier, inDays) -> com.linkeddesk.export.PhonePage.build(b, d, reg, watchNew, earlier, inDays, recentExplainers()));
         Logs.run("phone", "briefing page written: " + out, "", 0);
         return out;
     }

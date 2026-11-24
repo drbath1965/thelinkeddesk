@@ -92,7 +92,7 @@ final class Html {
         if (x != null) {
             sb.append(" <span class='act'>· ").append(x.starred() ? "<span class='star'>★ Starred</span> <a href='unstar:'>unstar</a>" : "<a href='star:'>☆ Star</a>")
               .append(" · <a href='unread:'>Mark unread</a> · <a href='watch:'>Watch this subject…</a> · <a href='copy:'>Copy</a> · <a href='export:'>Export…</a>")
-              .append(c.sourceCount() >= 3 ? " · <a href='framing:'>How outlets framed it</a>" : "").append("</span>");
+              .append(c.sourceCount() >= 3 ? " · <a href='framing:'>How outlets framed it</a>" : "").append(" · <a href='explain:'>Explain this</a>").append("</span>");
             if (x.newSinceRead()) sb.append(" <span class='new'>new coverage since you read it</span>");
         }
         // The headline opens the article, and a plain "Read it at …" link sits right under it.
@@ -335,6 +335,94 @@ final class Html {
         return sb.append("</table></body></html>").toString();
     }
 
+    private static final java.time.format.DateTimeFormatter XWHEN = java.time.format.DateTimeFormatter.ofPattern("MMM d, h:mm a").withZone(java.time.ZoneId.systemDefault());
+
+    /** An explainer (AI-F08): sections with linked citations, "more" on each point, follow-ups, and the articles read. */
+    static String explainer(com.linkeddesk.ai.Explainer.Result r, String budget) {
+                StringBuilder sb = new StringBuilder("<html><head><style>").append(css())
+                .append(".bl{font-size:").append(Theme.pt(12)).append(";margin:4px 0}.more{font-size:").append(Theme.pt(9)).append("}")
+                .append(".mine{color:").append(Theme.note()).append(";font-style:italic}</style></head><body>");
+        sb.append("<h1>").append(esc(r.subject())).append("</h1><p class='meta'>").append(r.level().label).append(" explainer by Claude · ")
+          .append(esc(XWHEN.format(java.time.Instant.ofEpochMilli(r.created())))).append(" · from ").append(r.refs().size()).append(" articles by ")
+          .append(r.outlets()).append(" outlets over ").append(r.days()).append(r.days() == 1 ? " day" : " days")
+          .append(r.previousCreated() > 0 ? " · updates the one from " + esc(XWHEN.format(java.time.Instant.ofEpochMilli(r.previousCreated()))) : "")
+          .append("<br>Written from these articles only; each point links to its sources. Points marked <i>(Claude's reading)</i> are its interpretation, not reported fact.")
+          .append(budget == null || budget.isBlank() ? "" : " " + esc(budget)).append("</p>");
+        sb.append("<p class='act'><a href='simpler:'>Explain it more simply</a> · <a href='update:'>Update with the latest news</a>")
+          .append(" · <a href='detailed:'>").append(r.level() == com.linkeddesk.ai.Explainer.Level.QUICK ? "Detailed version" : "Quick version").append("</a>")
+          .append(" · <a href='copy:'>Copy</a> · <a href='export:'>Export…</a> · <a href='delete:'>Delete</a></p>");
+        java.util.function.Function<String, String> cite = line -> {
+            String t = esc(line).replace("(Claude's reading)", "<span class='mine'>(Claude's reading)</span>")
+                    .replace("(Claude&#39;s reading)", "<span class='mine'>(Claude's reading)</span>");
+            return com.linkeddesk.ai.Explainer.render(t, r.refs(), s -> " <a href='" + esc(s.url()) + "'>[" + esc(s.source()) + ", "
+                    + esc(com.linkeddesk.ai.Explainer.shortDay(s)) + "]</a>");
+        };
+        if (r.isEmpty()) sb.append("<p>Claude's answer had nothing that could be traced to the articles.</p>");
+        for (String s : com.linkeddesk.ai.Explainer.SECTIONS) {
+            var lines = r.sections().get(s);
+            if (lines.isEmpty()) continue;
+            sb.append("<h2>").append(esc(com.linkeddesk.ai.Explainer.TITLES.get(s))).append("</h2>");
+            if (s.equals("BOTTOM LINE")) {
+                for (String l : lines) sb.append("<p class='bl'>").append(cite.apply(l)).append("</p>");
+                continue;
+            }
+            sb.append("<ul>");
+            for (int i = 0; i < lines.size(); i++) {
+                String l = lines.get(i);
+                if (s.equals("TERMS")) {
+                    int c = l.indexOf(':');
+                    sb.append("<li>").append(c > 0 && c < 50 ? "<b>" + esc(l.substring(0, c)) + "</b>" + cite.apply(l.substring(c)) : cite.apply(l)).append("</li>");
+                } else if (s.equals("TIMELINE") || s.equals("WHO")) {
+                    int c = l.indexOf(':');
+                    sb.append("<li>").append(c > 0 && c < 40 ? "<b>" + esc(l.substring(0, c)) + "</b>" + cite.apply(l.substring(c)) : cite.apply(l));
+                    sb.append(" <a class='more' href='deeper:").append(s.replace(' ', '_')).append(':').append(i).append("'>more ›</a></li>");
+                } else {
+                    sb.append("<li>").append(cite.apply(l)).append(" <a class='more' href='deeper:").append(s.replace(' ', '_')).append(':').append(i).append("'>more ›</a></li>");
+                }
+            }
+            sb.append("</ul>");
+        }
+        for (var f : r.followUps()) {
+            sb.append("<h2>").append(esc(f.label())).append("</h2>");
+            boolean inList = false;
+            for (String para : f.text().split("\\R")) {
+                String p = para.strip();
+                if (p.isEmpty()) continue;
+                boolean bullet = p.matches("^[-•*]\\s.*");
+                if (bullet && !inList) { sb.append("<ul>"); inList = true; }
+                if (!bullet && inList) { sb.append("</ul>"); inList = false; }
+                sb.append(bullet ? "<li>" : "<p>").append(cite.apply(bullet ? p.substring(1).strip() : p)).append(bullet ? "</li>" : "</p>");
+            }
+            if (inList) sb.append("</ul>");
+        }
+        if (!r.problems().isEmpty()) sb.append("<p class='act'>").append(esc(String.join(" ", r.problems()))).append("</p>");
+        sb.append("<h2>Articles Claude read</h2><table>");
+        for (var e : r.refs().entrySet()) {
+            var s = e.getValue();
+            sb.append("<tr><td width='34' class='meta'>[").append(e.getKey()).append("]</td><td><a href='").append(esc(s.url())).append("'>").append(esc(s.title()))
+              .append("</a><br><span class='meta'>").append(esc(s.source())).append(" · ").append(esc(s.day())).append(s.opinion() ? " · Opinion / analysis" : "")
+              .append(r.cited().contains(e.getKey()) ? "" : " · not cited").append("</span></td></tr>");
+        }
+        return sb.append("</table></body></html>").toString();
+    }
+
+    /** What the Explainers tab shows before any explainer is open. */
+    static String explainerIntro(List<String> ideas, boolean hasKey) {
+        StringBuilder sb = new StringBuilder("<html><head><style>").append(css()).append("</style></head><body>");
+        sb.append("<h1>Explainers</h1><p class='sum'>Type a subject above (or use <b>Explain this</b> on a story, thread, storyline, topic, watch or search) ")
+          .append("and Claude reads the best articles you've saved on it, up to 25 across days and outlets, and pieces them together: ")
+          .append("the bottom line, what happened when, who's involved, why it matters, what's disputed, what to watch, and the jargon explained. ")
+          .append("Every point links to the articles it comes from.</p>");
+        if (!hasKey) sb.append("<p class='warn'>Explainers need an Anthropic API key: Tools > Settings > Claude.</p>");
+        sb.append("<p class='meta'>A quick explainer costs about 1-2 cents, a detailed one 3-6 cents. You see the cost before anything is sent.</p>");
+        if (!ideas.isEmpty()) {
+            sb.append("<h2>Try one</h2><ul>");
+            for (String i : ideas) sb.append("<li><a href='try:").append(esc(i)).append("'>").append(esc(i)).append("</a></li>");
+            sb.append("</ul>");
+        }
+        return sb.append("</body></html>").toString();
+    }
+
     static String answer(com.linkeddesk.ai.ArchiveQA.Answer a, String budget) {
         StringBuilder sb = new StringBuilder("<html><head><style>").append(css()).append("</style></head><body>");
         sb.append("<h1>").append(esc(a.question())).append("</h1>");
@@ -407,7 +495,8 @@ final class Html {
         StringBuilder sb = new StringBuilder("<html><head><style>").append(css()).append("</style></head><body>");
         sb.append("<h1>").append(esc(line.latest().headline)).append("</h1><p class='meta'>One event followed across ")
           .append(line.days()).append(line.days() == 1 ? " day" : " days").append(": ").append(line.stories().size())
-          .append(" stories, ").append(line.articleCount()).append(" articles, oldest first. Click a story to open it.</p><table>");
+          .append(" stories, ").append(line.articleCount()).append(" articles, oldest first. Click a story to open it.")
+          .append(" · <a href='explain:'>Explain this storyline (Claude)</a></p><table>");
         for (StoryCluster c : line.stories()) {
             sb.append("<tr><td width='8' bgcolor='").append(Theme.deskHex(c.category)).append("'></td><td>")
               .append("<span class='meta'>").append(WHEN.format(Instant.ofEpochMilli(c.firstSeen))).append(" · ")
@@ -426,7 +515,8 @@ final class Html {
         StringBuilder sb = new StringBuilder("<html><head><style>").append(css()).append("</style></head><body>");
         sb.append("<h1>Thread: ").append(esc(t.topic())).append("</h1><p class='meta'>")
           .append(t.stories().size()).append(" linked stories across ").append(t.desks().size())
-          .append(t.desks().size() == 1 ? " desk" : " desks").append(", oldest first. Click a story to open it.</p><table>");
+          .append(t.desks().size() == 1 ? " desk" : " desks").append(", oldest first. Click a story to open it.")
+          .append(" · <a href='explain:'>Explain this thread (Claude)</a></p><table>");
         List<StoryCluster> stories = t.stories();
         for (StoryCluster c : stories) {
             sb.append("<tr><td width='8' bgcolor='").append(Theme.deskHex(c.category)).append("'></td><td>")

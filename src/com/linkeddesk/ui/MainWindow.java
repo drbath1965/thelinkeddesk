@@ -63,6 +63,7 @@ public final class MainWindow extends JFrame implements Host {
     private final MapPanel map;
     private final WorldPanel world;
     private final AskPanel askPanel;
+    private final ExplainersPanel explainersPanel;
     private final TimelinePanel threadTimeline = new TimelinePanel();
     private final TimelinePanel lineTimeline = new TimelinePanel();
     private Analyzer.Result savedResult = new Analyzer.Result(List.of(), List.of(), 0);
@@ -110,6 +111,7 @@ public final class MainWindow extends JFrame implements Host {
         map = new MapPanel(this);
         world = new WorldPanel(this);
         askPanel = new AskPanel(this);
+        explainersPanel = new ExplainersPanel(this);
         watchPanel = new WatchPanel(this);
         sincePanel = new SincePanel(this);
         long lastActive = service.settings().lastActive();
@@ -156,7 +158,10 @@ public final class MainWindow extends JFrame implements Host {
             threadPane.setCaretPosition(0);
         });
         threadPane.addHyperlinkListener(e -> {
-            if (e.getEventType() == HyperlinkEvent.EventType.ACTIVATED && e.getDescription().startsWith("story:")) openStory(e.getDescription().substring(6));
+            if (e.getEventType() != HyperlinkEvent.EventType.ACTIVATED) return;
+            if (e.getDescription().startsWith("story:")) openStory(e.getDescription().substring(6));
+            else if (e.getDescription().equals("explain:") && threadList.getSelectedValue() != null)
+                explainSubject(threadList.getSelectedValue().topic(), threadList.getSelectedValue().stories());
         });
         JSplitPane threadRight = new JSplitPane(JSplitPane.VERTICAL_SPLIT, threadTimeline, new JScrollPane(threadPane));
         threadRight.setResizeWeight(0.3);
@@ -173,7 +178,10 @@ public final class MainWindow extends JFrame implements Host {
             linePane.setCaretPosition(0);
         });
         linePane.addHyperlinkListener(e -> {
-            if (e.getEventType() == HyperlinkEvent.EventType.ACTIVATED && e.getDescription().startsWith("story:")) openStory(e.getDescription().substring(6));
+            if (e.getEventType() != HyperlinkEvent.EventType.ACTIVATED) return;
+            if (e.getDescription().startsWith("story:")) openStory(e.getDescription().substring(6));
+            else if (e.getDescription().equals("explain:") && lineList.getSelectedValue() != null)
+                explainSubject(lineList.getSelectedValue().latest().headline, lineList.getSelectedValue().stories());
         });
         JSplitPane lineRight = new JSplitPane(JSplitPane.VERTICAL_SPLIT, lineTimeline, new JScrollPane(linePane));
         lineRight.setResizeWeight(0.3);
@@ -191,6 +199,7 @@ public final class MainWindow extends JFrame implements Host {
         tabs.addTab("Map", map);
         tabs.addTab("World", world);
         tabs.addTab("Ask", askPanel);
+        tabs.addTab("Explainers", explainersPanel);
         tabs.addTab("Markets", markets);
         tabs.addTab("Topics", topics);
         tabs.addTab("Search", search);
@@ -653,6 +662,30 @@ public final class MainWindow extends JFrame implements Host {
                 + ". Paste into Word, Outlook or Gmail and the links come along.");
     }
 
+    /**
+     * Explain this (AI-F08). One story is widened to its storyline and strongly linked stories, so the explainer has
+     * more than one day's coverage to piece together.
+     */
+    @Override public void explainSubject(String subject, List<StoryCluster> seed) {
+        List<StoryCluster> s = new ArrayList<>(seed == null ? List.of() : seed);
+        if (s.size() == 1 && result != null) {
+            StoryCluster c = s.get(0);
+            java.util.LinkedHashSet<StoryCluster> more = new java.util.LinkedHashSet<>(s);
+            java.util.Set<StoryCluster> guard = new java.util.HashSet<>();
+            for (StoryCluster x = c.continues; x != null && more.size() < 12 && guard.add(x); x = x.continues) more.add(x);
+            for (StoryCluster x : result.stories()) if (x.continues == c && more.size() < 12) more.add(x);
+            List<StoryLink> links = new ArrayList<>(c.links);
+            links.sort(Comparator.comparingDouble(StoryLink::score).reversed());
+            for (StoryLink l : links) {
+                if (more.size() >= 12 || l.score() < 0.30) break;
+                more.add(l.from() == c ? l.to() : l.from());
+            }
+            s = new ArrayList<>(more);
+        }
+        tabs.setSelectedComponent(explainersPanel);
+        explainersPanel.start(subject, s);
+    }
+
     @Override public void framing(StoryCluster c) {
         service.settings().reload();
         if (!service.settings().hasApiKey()) {
@@ -707,6 +740,10 @@ public final class MainWindow extends JFrame implements Host {
             if (briefing.briefing() == null) { status.setText("The briefing isn't ready yet."); return; }
             ExportUi.save(this, this, com.linkeddesk.export.Exporter.briefing(briefing.briefing(), service.todaysDigest(), reg),
                     briefing.briefing().desks().values().stream().flatMap(l -> l.stream().map(com.linkeddesk.analysis.Briefing.Ranked::story)).toList());
+            return;
+        }
+        if (t == explainersPanel) {
+            if (!explainersPanel.exportOpen()) status.setText("Open an explainer to export it.");
             return;
         }
         if (threadList.isShowing() && threadList.getSelectedValue() != null) {
@@ -951,6 +988,7 @@ public final class MainWindow extends JFrame implements Host {
         map.refreshPage();
         world.refreshPage();
         askPanel.refreshPage();
+        explainersPanel.refreshPage();
         topics.refresh();
         for (JList<?> l : List.of(threadList, lineList)) { l.setFixedCellHeight(10); l.setFixedCellHeight(-1); l.revalidate(); l.repaint(); }
         StoryThread th = threadList.getSelectedValue();

@@ -1,13 +1,13 @@
-# The Linked Desk 1.8.0
+# The Linked Desk 1.9.0
 
 A Windows desktop app that downloads world news every day, keeps every article, groups reports of the same event into one story, and links related stories across World, Finance, Politics, Society & Climate, Tech & Science, and Defense & Space. Follow your own topics and search everything you've ever downloaded.
 
 ## Run it
 **Easiest (no Java needed):** run `build-installer.bat` once on a PC with the JDK 21+, then use what it makes:
-- `dist\The Linked Desk-1.8.0.msi` if the WiX Toolset 3 is installed (Start-menu entry, desktop shortcut, uninstaller; installs for your user, no admin rights), or
-- `dist\TheLinkedDesk-1.8.0-windows.zip` otherwise: unzip anywhere and run `The Linked Desk.exe`.
+- `dist\The Linked Desk-1.9.0.msi` if the WiX Toolset 3 is installed (Start-menu entry, desktop shortcut, uninstaller; installs for your user, no admin rights), or
+- `dist\TheLinkedDesk-1.9.0-windows.zip` otherwise: unzip anywhere and run `The Linked Desk.exe`.
 
-**Or from the jar:** with Java 21+ installed, double-click **Run The Linked Desk.bat** (or `LinkedDesk-1.8.0.jar`). The jar's name carries the version; to update, put the new jar in the same folder: the .bat starts the newest one, and the daily download task moves to it the first time you open it.
+**Or from the jar:** with Java 21+ installed, double-click **Run The Linked Desk.bat** (or `LinkedDesk-1.9.0.jar`). The jar's name carries the version; to update, put the new jar in the same folder: the .bat starts the newest one, and the daily download task moves to it the first time you open it.
 
 Opening the app a second time just brings the open window to the front.
 
@@ -52,6 +52,7 @@ Opening the app a second time just brings the open window to the front.
 - **Daily digest**: after the daily download Claude writes "How today connects" at the top of the briefing: what the reports say, kept apart from Claude's own reading, and what to watch, each point citing its stories.
 - **Link checks**: Claude checks the day's top new links (10 by default) and marks each "✓ Checked by Claude: real" or "⚠ Likely coincidence", with a reason. A link is never checked twice.
 - **Ask Claude why** on any link, and the **Ask** tab.
+- **Explainers** (Explainers tab, or **Explain this** on a story, thread, storyline, topic, watch or search results): Claude reads the best articles you've saved on a subject (up to 25, across days and outlets; one copy of each wire report; opinion kept apart and attributed) and pieces them together in plain language: the bottom line, what happened when, who's involved, why it matters, what's disputed or unknown, what to watch next, and the jargon explained. Every point links to the articles it comes from (points with no source are left out), and Claude's own reading is marked as such. **Quick** (one screen) or **Detailed**; you see how many articles it will read and the most it could cost before anything is sent (about 1-2 cents quick, 3-6 cents detailed). Then **Explain it more simply**, **more ›** on any point to go deeper, **Update with the latest news** (says what changed since last time), Copy, Export to Word/HTML/Markdown. Explainers are saved in `explainers\` (plain text, included in backups), and the ones from the last 3 days go into the phone briefing.
 - **How outlets framed it** on any story with 3+ outlets: Claude compares the headlines, summaries and (where a feed gives it) full text: what they all report, what each stresses, what only some report, and differences in wording, each point linked to the outlets it comes from. It describes the coverage; it doesn't say who is right.
 - **Budget**: a monthly limit in US dollars (default $5). Before each request the app estimates its largest possible cost and doesn't send it if that would pass the limit; you see why instead. Costs are worked out from the tokens Anthropic reports and Anthropic's list prices (Claude Sonnet 5.5: $2 / $10 per million input / output tokens; enter your own prices if they differ). Answers are cached, so the same question is never paid for twice. **Tools > Claude usage** shows the month by feature. Typical use (digest + 10 link checks a day, a few questions) is about $1 a month.
 

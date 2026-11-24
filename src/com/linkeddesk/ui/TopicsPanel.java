@@ -17,7 +17,8 @@ final class TopicsPanel extends JPanel {
     private final DefaultListModel<Topic> model = new DefaultListModel<>();
     private final JList<Topic> list = new JList<>(model);
     private final StoryBrowser browser;
-    private final JButton edit = new JButton("Edit…"), pause = new JButton("Pause"), delete = new JButton("Delete…"), now = new JButton("Download now");
+    private final JButton edit = new JButton("Edit…"), pause = new JButton("Pause"), delete = new JButton("Delete…"), now = new JButton("Download now"),
+            explain = new JButton("Explain (Claude)");
     // Suggested topics (FET-F09)
     private final DefaultListModel<com.linkeddesk.analysis.TopicSuggester.Suggestion> suggestions = new DefaultListModel<>();
     private final JList<com.linkeddesk.analysis.TopicSuggester.Suggestion> suggestionList = new JList<>(suggestions);
@@ -38,9 +39,11 @@ final class TopicsPanel extends JPanel {
         pause.addActionListener(e -> togglePause());
         delete.addActionListener(e -> deleteTopic());
         now.addActionListener(e -> downloadSelected());
+        explain.setToolTipText("Claude reads this topic's articles and explains the subject");
+        explain.addActionListener(e -> { Topic t = list.getSelectedValue(); if (t != null) host.explainSubject(t.name(), browser.shown()); });
         JPanel buttons = new JPanel(new GridLayout(0, 2, 6, 6));
         buttons.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
-        for (JButton b : List.of(add, edit, pause, delete, now)) buttons.add(b);
+        for (JButton b : List.of(add, edit, pause, delete, now, explain)) buttons.add(b);
 
         JLabel intro = new JLabel("<html><div style='width:280px;color:" + Theme.note() + "'>Topics are searched across world news on every "
                 + "daily download, so you get stories the regular feeds don't carry. Their stories also join the main "
@@ -165,7 +168,7 @@ final class TopicsPanel extends JPanel {
 
     private void updateButtons() {
         Topic t = list.getSelectedValue();
-        for (JButton b : List.of(edit, pause, delete, now)) b.setEnabled(t != null);
+        for (JButton b : List.of(edit, pause, delete, now, explain)) b.setEnabled(t != null);
         pause.setText(t != null && t.paused() ? "Resume" : "Pause");
     }
 

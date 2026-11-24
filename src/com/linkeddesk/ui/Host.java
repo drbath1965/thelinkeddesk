@@ -43,6 +43,8 @@ interface Host {
 
     /** Copies a story with its sources to the clipboard; saves it as a file (EXP-F01). */
     default void copyStory(StoryCluster c) { }
+    /** Explain a subject (AI-F08) from these stories, or (seed empty) from a search of the archive. */
+    default void explainSubject(String subject, java.util.List<StoryCluster> seed) { }
     /** How the outlets in a story framed it (AI-F07). */
     default void framing(StoryCluster c) { }
     default void exportStory(StoryCluster c) { }

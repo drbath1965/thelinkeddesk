@@ -64,6 +64,22 @@ public final class ClaudeService {
         return new double[]{in > 0 ? in : list[0], out > 0 ? out : list[1]};
     }
 
+    /** The most a request could cost (US dollars), as checked against the budget before it's sent. */
+    public double estimate(String prompt, int maxTokens) {
+        settings.reload();
+        return Pricing.cost(prices(), prompt.length() / 3 + 50, maxTokens);
+    }
+
+    /** True if this exact request was answered before (so it costs nothing). */
+    public synchronized boolean isCached(String feature, String prompt, int maxTokens) {
+        settings.reload();
+        loadCache();
+        return cache.containsKey(hash(feature + "\u0000" + settings.model() + "\u0000" + maxTokens + "\u0000" + prompt));
+    }
+
+    /** The monthly budget in US dollars. */
+    public double budget() { settings.reload(); return settings.claudeBudget(); }
+
     /**
      * Asks Claude, or answers from the cache. {@code feature} names what it's for in the usage log
      * ("explain", "digest", "check", "ask").

@@ -33,6 +33,12 @@ public final class PhonePage {
 
     /** What's new on your watchlist, by watch name. */
     public static String build(Briefing b, Digest d, Regions regions, Map<String, List<StoryCluster>> watchNew, List<LocalDate> earlier, boolean inDaysFolder) {
+        return build(b, d, regions, watchNew, earlier, inDaysFolder, List.of());
+    }
+
+    /** With the explainers made recently (AI-F08): each one's bottom line, with the rest folded away. */
+    public static String build(Briefing b, Digest d, Regions regions, Map<String, List<StoryCluster>> watchNew, List<LocalDate> earlier, boolean inDaysFolder,
+                               List<com.linkeddesk.ai.Explainer.Result> explainers) {
         StringBuilder h = new StringBuilder("<!DOCTYPE html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">\n"
                 + "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<meta name=\"color-scheme\" content=\"light dark\">\n"
                 + "<title>Briefing · " + esc(DATE.format(Instant.ofEpochMilli(b.now()))) + "</title>\n<style>\n" + CSS + "</style></head><body>\n");
@@ -41,6 +47,7 @@ public final class PhonePage {
          .append("</div></header>\n<nav>");
         if (!watchNew.isEmpty()) h.append("<a href=\"#watch\">Watchlist</a>");
         if (d != null && !d.isEmpty()) h.append("<a href=\"#today\">Today</a>");
+        if (!explainers.isEmpty()) h.append("<a href=\"#explainers\">Explainers</a>");
         if (!b.newLinks().isEmpty()) h.append("<a href=\"#links\">Links</a>");
         for (var e : b.desks().entrySet()) if (!e.getValue().isEmpty()) h.append("<a href=\"#").append(e.getKey().name().toLowerCase(Locale.ROOT)).append("\">").append(esc(short_(e.getKey()))).append("</a>");
         h.append("</nav>\n<main>\n");
@@ -58,6 +65,17 @@ public final class PhonePage {
             digest(h, "What the reports say", d.reported(), d, b, false);
             digest(h, "Claude's reading (inference, not reported fact)", d.inference(), d, b, true);
             digest(h, "What to watch", d.watch(), d, b, false);
+            h.append("</section>\n");
+        }
+        if (!explainers.isEmpty()) {
+            h.append("<section id=\"explainers\"><h2>Explainers</h2><p class=\"note\">Written by Claude from the articles cited.</p>");
+            for (var x : explainers) {
+                h.append("<h3>").append(esc(x.subject())).append("</h3>");
+                explainerList(h, x, "BOTTOM LINE", null);
+                h.append("<details><summary>More</summary>");
+                for (String s : List.of("CHANGED", "TIMELINE", "WHY IT MATTERS", "WATCH")) explainerList(h, x, s, com.linkeddesk.ai.Explainer.TITLES.get(s));
+                h.append("</details>");
+            }
             h.append("</section>\n");
         }
         if (!b.newLinks().isEmpty()) {
@@ -120,6 +138,16 @@ public final class PhonePage {
             m.appendTail(sb);
             h.append("<li>").append(italic ? "<i>" : "").append(sb).append(italic ? "</i>" : "").append("</li>");
         }
+        h.append("</ul>");
+    }
+
+    private static void explainerList(StringBuilder h, com.linkeddesk.ai.Explainer.Result x, String section, String title) {
+        List<String> lines = x.sections().getOrDefault(section, List.of());
+        if (lines.isEmpty()) return;
+        if (title != null) h.append("<h4>").append(esc(title)).append("</h4>");
+        h.append("<ul class=\"dg\">");
+        for (String l : lines) h.append("<li>").append(com.linkeddesk.ai.Explainer.render(esc(l), x.refs(),
+                s -> "<a class=\"cite\" href=\"" + esc(s.url()) + "\">" + esc(s.source()) + "</a>")).append("</li>");
         h.append("</ul>");
     }
 

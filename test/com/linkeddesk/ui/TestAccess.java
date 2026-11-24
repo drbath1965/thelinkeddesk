@@ -22,6 +22,8 @@ public final class TestAccess {
         }
     }
 
+    public static String explainerHtml(com.linkeddesk.ai.Explainer.Result r) { return Html.explainer(r, ""); }
+
     public static String framingHtml(com.linkeddesk.ai.Framing.Result r) { return Html.framing(r, ""); }
 
     public static String answerPage(ArchiveQA.Answer a) { return Html.answer(a, ""); }

@@ -52,7 +52,10 @@ final class WatchPanel extends JPanel {
         edit.addActionListener(e -> editSelected());
         delete.addActionListener(e -> deleteSelected());
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 4));
-        buttons.add(add); buttons.add(edit); buttons.add(delete);
+        JButton explain = new JButton("Explain");
+        explain.setToolTipText("Claude reads this watch's stories and explains the subject");
+        explain.addActionListener(e -> { var w = list.getSelectedValue(); if (w != null) host.explainSubject(w.name(), browser.shown()); });
+        buttons.add(add); buttons.add(edit); buttons.add(delete); buttons.add(explain);
         JPanel left = new JPanel(new BorderLayout());
         JLabel intro = new JLabel("<html><div style='width:" + Html.cssPx(280) + "px;color:" + Theme.note() + "'>Subjects you follow across all desks. "
                 + "New matches are highlighted in Stories after each download and, for watches that notify, pop up as a Windows notification.</div></html>");

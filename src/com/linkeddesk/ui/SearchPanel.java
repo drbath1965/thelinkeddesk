@@ -47,6 +47,14 @@ final class SearchPanel extends JPanel {
         top.add(searchBtn);
         top.add(liveBtn);
         top.add(saveBtn);
+        JButton explainBtn = new JButton("Explain these results");
+        explainBtn.setToolTipText("Claude reads the best of these articles and explains the subject");
+        explainBtn.addActionListener(e -> {
+            String q = text();
+            if (q.isEmpty() || browser.shown().isEmpty()) { JOptionPane.showMessageDialog(this, "Search for something first."); return; }
+            host.explainSubject(q.replaceAll("\\b(source|desk|after|before|region|is):\\S+", "").replace("\"", "").replaceAll("\\s+", " ").strip(), browser.shown());
+        });
+        top.add(explainBtn);
         JPanel filters = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
         filters.add(new JLabel("Desk:")); filters.add(desk);
         filters.add(new JLabel("When:")); filters.add(when);
