@@ -260,7 +260,7 @@ public final class Text {
     }
 
     private static String capitalize(String w) {
-        if (Character.isUpperCase(w.charAt(0))) return w;
+        if (w.isEmpty() || Character.isUpperCase(w.charAt(0))) return w;
         return Character.toUpperCase(w.charAt(0)) + w.substring(1);
     }
 

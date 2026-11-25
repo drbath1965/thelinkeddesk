@@ -176,6 +176,12 @@ public final class ReadingTest {
         c.that(names.containsAll(List.of("Ukraine", "Russia", "Libya", "United States")), "names, nationality words, leaders and 'U.S.' found: " + names);
         c.that(Countries.mentions("Turkey prices rise before the holiday dinner").containsKey(Countries.byCode("TR"))
                 && !Countries.mentions("roast turkey prices rise").containsKey(Countries.byCode("TR")), "'turkey' only counts with a capital");
+        boolean ok = true;
+        try {
+            ok = Countries.mentions("Biden ’s plan for Ukraine").containsKey(Countries.byCode("UA")) && Countries.mentions("’s").isEmpty()
+                    && Countries.mentions("U.S. 's . Iran").containsKey(Countries.byCode("IR"));
+        } catch (RuntimeException e) { ok = false; }
+        c.that(ok, "a stray apostrophe-s (\"Biden ’s\") doesn't break the World map (1.9.1 fix)");
         c.that(Countries.mentions("us officials said").isEmpty() && !Countries.mentions("US officials said").isEmpty(), "'us' isn't the US; 'US' is");
         c.that(Countries.mentions("Fighting in Democratic Republic of Congo's Ituri").containsKey(Countries.byCode("CD")), "multi-word names ('Democratic Republic of Congo')");
         Map<Countries.Country, List<StoryCluster>> idx = Countries.index(rr.stories());

@@ -225,6 +225,7 @@ public final class Countries {
             String w = m.group().replace('’', '\'');
             if (w.endsWith("'s")) w = w.substring(0, w.length() - 2);
             while (w.endsWith(".") && w.length() > 1 && !w.matches("(?:[A-Z]\\.)+")) w = w.substring(0, w.length() - 1);
+            if (w.isEmpty() || w.equals(".") || w.equals("'")) continue;   // a lone "'s" or "." (e.g. "Biden ’s") isn't a word
             raw.add(w);
         }
         for (int i = 0; i < raw.size(); i++) {
@@ -234,7 +235,7 @@ public final class Countries {
                 StringBuilder sb = new StringBuilder();
                 for (int j = i; j < i + n; j++) { if (sb.length() > 0) sb.append(' '); sb.append(raw.get(j)); }
                 String phrase = sb.toString();
-                if (!Character.isUpperCase(phrase.charAt(0))) continue;         // names are capitalized
+                if (phrase.isEmpty() || !Character.isUpperCase(phrase.charAt(0))) continue;         // names are capitalized
                 Country c = CASED.get(phrase.replace(".", ""));
                 if (c == null) c = NAMES.get(norm(phrase));
                 if (c != null) { found = c; len = n; }

@@ -122,7 +122,7 @@ public final class TopicSuggester {
             i = -1;
             while ((i = l.indexOf(low, i + 1)) >= 0) if (!tx.startsWith(term, i)) lower++;
         }
-        return caps >= 1 && lower == 0 && Character.isUpperCase(term.charAt(0));
+        return caps >= 1 && lower == 0 && !term.isEmpty() && Character.isUpperCase(term.charAt(0));
     }
 
     private static Category mainDesk(Map<Category, Integer> m) {
