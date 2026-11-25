@@ -130,6 +130,8 @@ final class StoryPane extends JScrollPane {
         } else if (href.startsWith("full:") && current != null) {
             String id = href.substring(5);
             current.articles.stream().filter(a -> a.id.equals(id)).findFirst().ifPresent(this::showFullText);
+        } else if (href.equals("combined:") && current != null) {
+            host.combinedArticle(current);
         } else if (href.equals("connect:") && current != null) {
             host.findConnections(current);
         } else if ((href.startsWith("conn-accept:") || href.startsWith("conn-reject:")) && current != null) {

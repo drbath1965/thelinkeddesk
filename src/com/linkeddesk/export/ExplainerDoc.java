@@ -15,6 +15,7 @@ public final class ExplainerDoc {
     private static final DateTimeFormatter WHEN = DateTimeFormatter.ofPattern("MMM d, yyyy h:mm a").withZone(ZoneId.systemDefault());
 
     public static Doc build(Explainer.Result r) {
+        if (r.level() == Explainer.Level.ARTICLE) return article(r);
         Doc d = new Doc("Explainer: " + r.subject());
         d.h1(r.subject());
         d.small().muted(r.level().label + " explainer by Claude, " + WHEN.format(Instant.ofEpochMilli(r.created())) + ", from " + r.refs().size()
@@ -33,6 +34,27 @@ public final class ExplainerDoc {
                 boolean bullet = p.matches("^[-•*]\\s.*");
                 cited(bullet ? d.bullet() : d.p(), bullet ? p.substring(1).strip() : p, r.refs());
             }
+        }
+        if (!r.problems().isEmpty()) d.small().muted(String.join(" ", r.problems()));
+        d.h2("Articles Claude read");
+        for (var e : r.refs().entrySet()) {
+            Explainer.Source s = e.getValue();
+            d.bullet().muted("[" + e.getKey() + "] ").link(s.title(), s.url()).muted(" · " + s.source() + " · " + s.day() + (s.opinion() ? " · opinion" : ""));
+        }
+        return d;
+    }
+
+    /** A combined article (AI-F10) as a document: headline, summary, paragraphs, then the articles. */
+    static Doc article(Explainer.Result r) {
+        Doc d = new Doc(Explainer.headline(r));
+        d.h1(Explainer.headline(r));
+        for (String l : r.sections().get("SUMMARY")) cited(d.p(), l, r.refs());
+        d.small().muted("Combined article by Claude, " + WHEN.format(Instant.ofEpochMilli(r.created())) + ", pieced together from " + r.refs().size()
+                + " articles by " + r.outlets() + " outlets. Sentences marked (Claude's reading) are its interpretation, not reported fact.");
+        for (String l : r.sections().get("ARTICLE")) cited(d.p(), l, r.refs());
+        for (Explainer.FollowUp f : r.followUps()) {
+            d.h2(f.label());
+            for (String para : f.text().split("\\R")) if (!para.isBlank()) cited(d.p(), para.strip(), r.refs());
         }
         if (!r.problems().isEmpty()) d.small().muted(String.join(" ", r.problems()));
         d.h2("Articles Claude read");

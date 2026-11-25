@@ -97,7 +97,8 @@ final class Html {
         if (x != null) {
             sb.append(" <span class='act'>· ").append(x.starred() ? "<span class='star'>★ Starred</span> <a href='unstar:'>unstar</a>" : "<a href='star:'>☆ Star</a>")
               .append(" · <a href='unread:'>Mark unread</a> · <a href='watch:'>Watch this subject…</a> · <a href='copy:'>Copy</a> · <a href='export:'>Export…</a>")
-              .append(c.sourceCount() >= 3 ? " · <a href='framing:'>How outlets framed it</a>" : "").append(" · <a href='explain:'>Explain this</a>").append("</span>");
+              .append(c.sourceCount() >= 3 ? " · <a href='framing:'>How outlets framed it</a>" : "").append(" · <a href='explain:'>Explain this</a>")
+              .append(c.links.isEmpty() ? "" : " · <a href='combined:'>One article from the linked stories</a>").append("</span>");
             if (x.newSinceRead()) sb.append(" <span class='new'>new coverage since you read it</span>");
         }
         // The headline opens the article, and a plain "Read it at …" link sits right under it.
@@ -138,6 +139,9 @@ final class Html {
         }
 
         sb.append("<h2>Linked stories (").append(c.links.size()).append(")</h2>");
+        if (!c.links.isEmpty() && canExplain)
+            sb.append("<p class='act'><a href='combined:'>Write one article from this story and its ").append(c.links.size())
+              .append(c.links.size() == 1 ? " linked story" : " linked stories").append(" (Claude)</a></p>");
         if (c.links.isEmpty()) {
             sb.append("<p class='meta'>No other story in this time window shares enough distinctive names or topics.</p>");
         } else {
@@ -381,6 +385,7 @@ final class Html {
 
     /** An explainer (AI-F08): sections with linked citations, "more" on each point, follow-ups, and the articles read. */
     static String explainer(com.linkeddesk.ai.Explainer.Result r, String budget) {
+        if (r.level() == com.linkeddesk.ai.Explainer.Level.ARTICLE) return combinedArticle(r, budget);
                 StringBuilder sb = new StringBuilder("<html><head><style>").append(css())
                 .append(".bl{font-size:").append(Theme.pt(12)).append(";margin:4px 0}.more{font-size:").append(Theme.pt(9)).append("}")
                 .append(".mine{color:").append(Theme.note()).append(";font-style:italic}</style></head><body>");
@@ -443,6 +448,50 @@ final class Html {
                 sb.append(bullet ? "<li>" : "<p>").append(cite.apply(bullet ? p.substring(1).strip() : p)).append(bullet ? "</li>" : "</p>");
             }
             if (inList) sb.append("</ul>");
+        }
+        if (!r.problems().isEmpty()) sb.append("<p class='act'>").append(esc(String.join(" ", r.problems()))).append("</p>");
+        sb.append("<h2>Articles Claude read</h2><table>");
+        for (var e : r.refs().entrySet()) {
+            var s = e.getValue();
+            sb.append("<tr><td width='34' class='meta'>[").append(e.getKey()).append("]</td><td><a href='").append(esc(s.url())).append("'>").append(esc(s.title()))
+              .append("</a><br><span class='meta'>").append(esc(s.source())).append(" · ").append(esc(s.day())).append(s.opinion() ? " · Opinion / analysis" : "")
+              .append(r.cited().contains(e.getKey()) ? "" : " · not cited").append("</span></td></tr>");
+        }
+        return sb.append("</table></body></html>").toString();
+    }
+
+    /** A combined article (AI-F10): headline, summary and paragraphs with linked citations, then the articles read. */
+    static String combinedArticle(com.linkeddesk.ai.Explainer.Result r, String budget) {
+        var X = com.linkeddesk.ai.Explainer.class;
+        StringBuilder sb = new StringBuilder("<html><head><style>").append(css())
+                .append(".para{font-size:").append(Theme.pt(11.5f)).append(";margin:0 0 9px 0;line-height:1.35}.mine{color:").append(Theme.note()).append(";font-style:italic}")
+                .append(".more{font-size:").append(Theme.pt(9)).append("}</style></head><body>");
+        sb.append("<p class='meta'>COMBINED ARTICLE BY CLAUDE</p><h1>").append(esc(com.linkeddesk.ai.Explainer.headline(r))).append("</h1>");
+        java.util.function.Function<String, String> cite = line -> {
+            String t = esc(line).replace("(Claude's reading)", "<span class='mine'>(Claude's reading)</span>");
+            return com.linkeddesk.ai.Explainer.render(t, r.refs(), s -> " <a href='" + esc(s.url()) + "'>[" + esc(s.source()) + "]</a>");
+        };
+        java.util.function.BiFunction<String, Integer, String> flag = (s, i) -> r.weak().contains(s + ":" + i) ? " <span class='warn'>⚠ check source</span>" : "";
+        var sum = r.sections().get("SUMMARY");
+        for (int i = 0; i < sum.size(); i++) sb.append("<p class='sum'>").append(cite.apply(sum.get(i))).append(flag.apply("SUMMARY", i)).append("</p>");
+        sb.append("<p class='meta'>Pieced together from ").append(r.refs().size()).append(" articles by ").append(r.outlets()).append(" outlets over ")
+          .append(r.days()).append(r.days() == 1 ? " day" : " days").append(" · ").append(esc(XWHEN.format(java.time.Instant.ofEpochMilli(r.created()))))
+          .append(" · about ").append(r.readingMinutes()).append(" min read")
+          .append(r.previousCreated() > 0 ? " · updates the one from " + esc(XWHEN.format(java.time.Instant.ofEpochMilli(r.previousCreated()))) : "");
+        int pts = r.citedPoints();
+        if (pts > 0) sb.append("<br>Every paragraph links to its sources. Source check: ").append(pts - r.weak().size()).append(" of ").append(pts)
+                .append(" passages share key words with the articles they cite").append(r.weak().isEmpty() ? "." : "; " + r.weak().size() + " marked ⚠ to check.");
+        sb.append(" Sentences marked <i>(Claude's reading)</i> are its interpretation.").append(budget == null || budget.isBlank() ? "" : " " + esc(budget)).append("</p>");
+        sb.append("<p class='act'><a href='simpler:'>Explain it more simply</a> · <a href='update:'>Update with the latest news</a>")
+          .append(" · <a href='copy:'>Copy</a> · <a href='export:'>Export…</a> · <a href='delete:'>Delete</a></p><hr>");
+        var paras = r.sections().get("ARTICLE");
+        if (paras.isEmpty() && sum.isEmpty()) sb.append("<p>Claude's answer had nothing that could be traced to the articles.</p>");
+        for (int i = 0; i < paras.size(); i++)
+            sb.append("<p class='para'>").append(cite.apply(paras.get(i))).append(flag.apply("ARTICLE", i))
+              .append(" <a class='more' href='deeper:ARTICLE:").append(i).append("'>more ›</a></p>");
+        for (var f : r.followUps()) {
+            sb.append("<h2>").append(esc(f.label())).append("</h2>");
+            for (String para : f.text().split("\\R")) if (!para.isBlank()) sb.append("<p>").append(cite.apply(para.strip().replaceFirst("^[-•*]\\s+", "• "))).append("</p>");
         }
         if (!r.problems().isEmpty()) sb.append("<p class='act'>").append(esc(String.join(" ", r.problems()))).append("</p>");
         sb.append("<h2>Articles Claude read</h2><table>");
@@ -565,7 +614,7 @@ final class Html {
         sb.append("<h1>Thread: ").append(esc(t.topic())).append("</h1><p class='meta'>")
           .append(t.stories().size()).append(" linked stories across ").append(t.desks().size())
           .append(t.desks().size() == 1 ? " desk" : " desks").append(", oldest first. Click a story to open it.")
-          .append(" · <a href='explain:'>Explain this thread (Claude)</a></p><table>");
+          .append(" · <a href='explain:'>Explain this thread (Claude)</a> · <a href='combined:'>Write it as one article (Claude)</a></p><table>");
         List<StoryCluster> stories = t.stories();
         for (StoryCluster c : stories) {
             sb.append("<tr><td width='8' bgcolor='").append(Theme.deskHex(c.category)).append("'></td><td>")

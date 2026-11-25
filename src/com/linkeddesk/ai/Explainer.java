@@ -24,19 +24,22 @@ public final class Explainer {
     private Explainer() {}
 
     public enum Level {
-        QUICK("Quick", 14, 1000), DETAILED("Detailed", 25, 2400);
+        QUICK("Quick", 14, 1000), DETAILED("Detailed", 25, 2400),
+        /** One news article pieced together from linked stories (AI-F10). */
+        ARTICLE("Combined article", 30, 2800);
         public final String label; public final int maxArticles, maxTokens;
         Level(String label, int maxArticles, int maxTokens) { this.label = label; this.maxArticles = maxArticles; this.maxTokens = maxTokens; }
         @Override public String toString() { return label; }
     }
 
     public static final Pattern TAG = Pattern.compile("\\[\\s*S(\\d+)\\s*\\]");
-    public static final String[] SECTIONS = {"BOTTOM LINE", "CHANGED", "TIMELINE", "WHO", "WHY IT MATTERS", "DISPUTED", "WATCH", "TERMS"};
-    public static final Map<String, String> TITLES = Map.of("BOTTOM LINE", "The bottom line", "CHANGED", "What's changed since last time",
-            "TIMELINE", "What happened", "WHO", "Who's involved", "WHY IT MATTERS", "Why it matters", "DISPUTED", "What's disputed or still unknown",
-            "WATCH", "What to watch next", "TERMS", "Terms explained");
+    public static final String[] SECTIONS = {"HEADLINE", "SUMMARY", "ARTICLE", "BOTTOM LINE", "CHANGED", "TIMELINE", "WHO", "WHY IT MATTERS", "DISPUTED", "WATCH", "TERMS"};
+    public static final Map<String, String> TITLES = Map.ofEntries(Map.entry("BOTTOM LINE", "The bottom line"), Map.entry("CHANGED", "What's changed since last time"),
+            Map.entry("TIMELINE", "What happened"), Map.entry("WHO", "Who's involved"), Map.entry("WHY IT MATTERS", "Why it matters"),
+            Map.entry("DISPUTED", "What's disputed or still unknown"), Map.entry("WATCH", "What to watch next"), Map.entry("TERMS", "Terms explained"),
+            Map.entry("HEADLINE", "Headline"), Map.entry("SUMMARY", "In brief"), Map.entry("ARTICLE", "The article"));
     /** Sections where every point must cite an article. */
-    public static final Set<String> FACTUAL = Set.of("BOTTOM LINE", "CHANGED", "TIMELINE", "WHO", "DISPUTED");
+    public static final Set<String> FACTUAL = Set.of("BOTTOM LINE", "CHANGED", "TIMELINE", "WHO", "DISPUTED", "SUMMARY", "ARTICLE");
     static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("MMM d, yyyy").withZone(ZoneId.systemDefault());
 
     /** An article as the explainer keeps it (enough to show and link it later). */
@@ -138,6 +141,7 @@ public final class Explainer {
 
     /** {@code interests}: the reader's topics and watches, so WHY IT MATTERS can say how it bears on them. */
     public static String prompt(String subject, Map<String, Article> refs, Function<Article, String> fullText, Level level, Result previous, List<String> interests) {
+        if (level == Level.ARTICLE) return articlePrompt(subject, refs, fullText, previous);
         boolean quick = level == Level.QUICK;
         StringBuilder sb = new StringBuilder();
         sb.append("Explain this subject to a busy, intelligent reader who hasn't followed it: ").append(subject).append("\n\n")
@@ -166,13 +170,43 @@ public final class Explainer {
                 for (String l : previous.sections().getOrDefault(s, List.of())) sb.append("- ").append(TAG.matcher(l).replaceAll("").strip()).append('\n');
             sb.append('\n');
         }
+        articles(sb, refs, fullText, quick ? 400 : 600, quick ? 0 : 900, previous, "EXPLAINER");
+        return sb.toString();
+    }
+
+    /**
+     * Combined article (AI-F10): one news article pieced together from a story and the stories linked to it, every
+     * paragraph citing its articles. {@code previous}: the last article on the same story, to lead with what's new.
+     */
+    public static String articlePrompt(String subject, Map<String, Article> refs, Function<Article, String> fullText, Result previous) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Write ONE news article that pieces together the linked stories below into a single clear account for a busy, intelligent reader. ")
+          .append("The main story is: ").append(subject).append("\n\n")
+          .append("Use ONLY the articles below. Show how the stories connect: what led to what, who or what links them, and where accounts differ. ")
+          .append("Write plainly, in short paragraphs, in the order that makes the whole picture easiest to follow (usually most important first, then how it came about). ")
+          .append("Cite the articles each fact comes from as [S1], [S2]… at the end of the sentence; every paragraph must cite at least one article. ")
+          .append("Attribute claims (\"Ukraine says…\", \"according to Reuters…\"); pieces marked OPINION are commentary: attribute them, never state them as fact. ")
+          .append("If you add your own reading, end that sentence with \"(Claude's reading)\". Do not take sides. At most 700 words.\n\n")
+          .append("Reply in exactly this form:\nHEADLINE: one line, no citation\nSUMMARY: two sentences on the whole picture [S1][S3]\nARTICLE:\n")
+          .append("first paragraph [S1]\n\nnext paragraph [S2][S4]\n\n…\n\n");
+        if (previous != null) {
+            sb.append("An earlier version of this article (").append(DAY.format(Instant.ofEpochMilli(previous.created())))
+              .append(") said, in brief (its citations refer to other articles):\n");
+            for (String l : previous.sections().getOrDefault("SUMMARY", List.of())) sb.append("- ").append(TAG.matcher(l).replaceAll("").strip()).append('\n');
+            sb.append("Make the second paragraph start with \"Since ").append(DAY.format(Instant.ofEpochMilli(previous.created())))
+              .append("\" and say what is new.\n\n");
+        }
+        articles(sb, refs, fullText, 600, 900, previous, "ARTICLE");
+        return sb.toString();
+    }
+
+    private static void articles(StringBuilder sb, Map<String, Article> refs, Function<Article, String> fullText, int sumMax, int fullMax, Result previous, String what) {
         sb.append("ARTICLES (oldest first):\n\n");
-        int sumMax = quick ? 400 : 600, fullMax = quick ? 0 : 900;
         for (var e : refs.entrySet()) {
             Article a = e.getValue();
             sb.append('[').append(e.getKey()).append("] ").append(a.source).append(" · ").append(DAY.format(Instant.ofEpochMilli(a.published)))
               .append(Coverage.opinion(a) ? " · OPINION" : "");
-            if (previous != null && a.fetched > previous.created()) sb.append(" · NEW SINCE THE EARLIER EXPLAINER");
+            if (previous != null && a.fetched > previous.created()) sb.append(" · NEW SINCE THE EARLIER ").append(what);
             sb.append("\nHeadline: ").append(a.title).append('\n');
             String sum = cut(a.summary, sumMax);
             if (!sum.isBlank()) sb.append("Summary: ").append(sum).append('\n');
@@ -180,7 +214,12 @@ public final class Explainer {
             if (!full.isBlank() && !full.startsWith(sum.replace("…", ""))) sb.append("Text: ").append(full.replace('\n', ' ')).append('\n');
             sb.append('\n');
         }
-        return sb.toString();
+    }
+
+    /** The article's headline (or the subject if Claude gave none). */
+    public static String headline(Result r) {
+        List<String> h = r.sections().getOrDefault("HEADLINE", List.of());
+        return h.isEmpty() ? r.subject() : TAG.matcher(h.get(0)).replaceAll("").strip();
     }
 
     private static String cut(String s, int n) { return s == null ? "" : s.length() > n ? s.substring(0, n) + "…" : s; }

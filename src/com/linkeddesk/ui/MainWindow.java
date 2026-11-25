@@ -162,6 +162,10 @@ public final class MainWindow extends JFrame implements Host {
             if (e.getDescription().startsWith("story:")) openStory(e.getDescription().substring(6));
             else if (e.getDescription().equals("explain:") && threadList.getSelectedValue() != null)
                 explainSubject(threadList.getSelectedValue().topic(), threadList.getSelectedValue().stories());
+            else if (e.getDescription().equals("combined:") && threadList.getSelectedValue() != null) {
+                tabs.setSelectedComponent(explainersPanel);
+                explainersPanel.start(threadList.getSelectedValue().topic(), threadList.getSelectedValue().stories(), com.linkeddesk.ai.Explainer.Level.ARTICLE);
+            }
         });
         JSplitPane threadRight = new JSplitPane(JSplitPane.VERTICAL_SPLIT, threadTimeline, new JScrollPane(threadPane));
         threadRight.setResizeWeight(0.3);
@@ -660,6 +664,13 @@ public final class MainWindow extends JFrame implements Host {
         ExportUi.copy(com.linkeddesk.export.Exporter.story(c, service.regions()));
         status.setText("Copied \"" + c.headline + "\" with its " + c.articles.size() + (c.articles.size() == 1 ? " source" : " sources")
                 + ". Paste into Word, Outlook or Gmail and the links come along.");
+    }
+
+    @Override public void combinedArticle(StoryCluster c) {
+        List<StoryCluster> group = service.linkedGroup(c, 12);
+        if (group.size() < 2) { JOptionPane.showMessageDialog(this, "This story isn't linked to any other yet. Try Explain this, or Find connections first."); return; }
+        tabs.setSelectedComponent(explainersPanel);
+        explainersPanel.start(c.headline, group, com.linkeddesk.ai.Explainer.Level.ARTICLE);
     }
 
     @Override public StoryCluster storyWithArticles(java.util.Set<String> ids) {

@@ -36,7 +36,7 @@ final class ExplainersPanel extends JPanel {
         super(new BorderLayout());
         this.host = host;
         level.setSelectedItem(Explainer.Level.DETAILED);
-        level.setToolTipText("Quick: one screen from up to 14 articles. Detailed: the full breakdown from up to 25.");
+        level.setToolTipText("Quick: one screen from up to 14 articles. Detailed: the full breakdown from up to 25. Combined article: one news article from up to 30.");
         JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
         top.add(new JLabel("Explain:"));
         top.add(subject);
@@ -52,7 +52,8 @@ final class ExplainersPanel extends JPanel {
             @Override public Component getListCellRendererComponent(JList<?> l, Object v, int i, boolean sel, boolean f) {
                 super.getListCellRendererComponent(l, v, i, sel, f);
                 Explainer.Result r = (Explainer.Result) v;
-                setText("<html><div style='width:" + Html.cssPx(230) + "px'><b>" + Html.esc(r.subject()) + "</b><br><span style='color:" + (sel ? "" : Theme.muted()) + "'>"
+                boolean art = r.level() == Explainer.Level.ARTICLE;
+                setText("<html><div style='width:" + Html.cssPx(230) + "px'><b>" + Html.esc(art ? Explainer.headline(r) : r.subject()) + "</b><br><span style='color:" + (sel ? "" : Theme.muted()) + "'>"
                         + r.level().label + " · " + Html.esc(WHEN.format(Instant.ofEpochMilli(r.created()))) + " · " + r.refs().size() + " articles</span></div></html>");
                 setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, Theme.lineColor()), BorderFactory.createEmptyBorder(5, 8, 5, 6)));
                 return this;
@@ -62,7 +63,7 @@ final class ExplainersPanel extends JPanel {
         page.addHyperlinkListener(e -> { if (e.getEventType() == HyperlinkEvent.EventType.ACTIVATED) link(e.getDescription()); });
 
         JPanel left = new JPanel(new BorderLayout());
-        JLabel saved = new JLabel("Saved explainers");
+        JLabel saved = new JLabel("Saved explainers and articles");
         saved.setBorder(BorderFactory.createEmptyBorder(6, 8, 4, 8));
         left.add(saved, BorderLayout.NORTH);
         left.add(new JScrollPane(list), BorderLayout.CENTER);
@@ -132,7 +133,7 @@ final class ExplainersPanel extends JPanel {
                     @Override protected Explainer.Result doInBackground() throws Exception { return svc.runExplainer(plan); }
                     @Override protected void done() {
                         setWorking(false, " ");
-                        try { Explainer.Result r = get(); current = r; reload(r); show(r); host.status("Explainer saved: " + r.subject()); }
+                        try { Explainer.Result r = get(); current = r; reload(r); show(r); host.status((r.level() == Explainer.Level.ARTICLE ? "Article saved: " + Explainer.headline(r) : "Explainer saved: " + r.subject())); }
                         catch (Exception ex) { error(ex); }
                     }
                 }.execute();
@@ -143,7 +144,8 @@ final class ExplainersPanel extends JPanel {
     private boolean confirm(NewsService.ExplainPlan p) {
         DateTimeFormatter d = DateTimeFormatter.ofPattern("MMM d").withZone(ZoneId.systemDefault());
         String range = d.format(Instant.ofEpochMilli(p.from())) + (d.format(Instant.ofEpochMilli(p.from())).equals(d.format(Instant.ofEpochMilli(p.to()))) ? "" : " to " + d.format(Instant.ofEpochMilli(p.to())));
-        String msg = "<html><b>" + Html.esc(p.level().label) + " explainer of \"" + Html.esc(p.subject()) + "\"</b><br><br>"
+        String msg = "<html><b>" + (p.level() == Explainer.Level.ARTICLE ? "One article from the linked stories: \"" : Html.esc(p.level().label) + " explainer of \"")
+                + Html.esc(p.subject()) + "\"</b><br><br>"
                 + "Claude will read " + p.articles() + " articles from " + p.outlets() + " outlets, " + Html.esc(range) + "."
                 + (p.previous() != null ? "<br>It also says what changed since your explainer of " + Html.esc(WHEN.format(Instant.ofEpochMilli(p.previous().created())))
                    + " (" + p.newSincePrevious() + " of these articles are newer)." : "")

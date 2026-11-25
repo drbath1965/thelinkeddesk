@@ -673,6 +673,10 @@ public final class NewsService {
             if (settings.claudeDigest()) { writeDigest(b, false); sb.append("Digest written. "); }
             int n = checkLinks(b, settings.claudeCheckLinks());
             sb.append(n).append(" links checked. ");
+            if (settings.combinedDaily() > 0) {
+                int k = dailyCombined(b.result(), settings.combinedDaily());
+                sb.append(k).append(k == 1 ? " combined article" : " combined articles").append(" written. ");
+            }
             if (settings.connectionsDaily() > 0) {
                 int k = dailyConnections(b.result(), settings.connectionsDaily());
                 sb.append(k).append(k == 1 ? " story" : " stories").append(" checked for missed connections. ");
@@ -852,6 +856,46 @@ public final class NewsService {
                 if (e != null && e.kind() != null) links.set(i, links.get(i).withClaude(e.kind().label, e.reason()));
             }
         }
+    }
+
+    /**
+     * A story with the stories linked to it (yours and Claude's connections first, then the strongest), and its
+     * storyline, for one combined article (AI-F10). At most {@code max} stories.
+     */
+    public List<StoryCluster> linkedGroup(StoryCluster c, int max) {
+        java.util.LinkedHashSet<StoryCluster> g = new java.util.LinkedHashSet<>();
+        g.add(c);
+        java.util.Set<StoryCluster> guard = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        for (StoryCluster x = c.continues; x != null && g.size() < Math.max(2, max / 3) && guard.add(x); x = x.continues) g.add(x);
+        List<com.linkeddesk.model.StoryLink> links = new ArrayList<>(c.links);
+        links.sort(java.util.Comparator.comparing((com.linkeddesk.model.StoryLink l) -> !(l.confirmed() || l.byClaude()))
+                .thenComparing(java.util.Comparator.comparingDouble(com.linkeddesk.model.StoryLink::score).reversed()));
+        for (var l : links) { if (g.size() >= max) break; g.add(l.to()); }
+        return new ArrayList<>(g);
+    }
+
+    /** After the daily download: one combined article for each of the top {@code n} linked stories of the day. */
+    public int dailyCombined(Analyzer.Result r, int n) throws Exception {
+        long since = System.currentTimeMillis() - 30 * 3_600_000L, recent = System.currentTimeMillis() - 20 * 3_600_000L;
+        List<StoryCluster> top = new ArrayList<>();
+        for (StoryCluster c : r.stories()) if (c.lastSeen >= since && c.links.size() >= 2) top.add(c);
+        top.sort(java.util.Comparator.comparingInt((StoryCluster c) -> c.links.size() * 2 + c.independentCount()).reversed());
+        int done = 0;
+        java.util.Set<StoryCluster> covered = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        java.util.Set<String> written = new java.util.HashSet<>();     // articles already in a recent combined article
+        for (var x : explainers().all())
+            if (x.level() == com.linkeddesk.ai.Explainer.Level.ARTICLE && x.created() >= recent) for (var s : x.refs().values()) written.add(s.id());
+        for (StoryCluster c : top) {
+            if (done >= n) break;
+            if (covered.contains(c) || c.articles.stream().anyMatch(a -> written.contains(a.id))) continue;
+            List<StoryCluster> group = linkedGroup(c, 12);
+            ExplainPlan p;
+            try { p = planExplainer(c.headline, group, com.linkeddesk.ai.Explainer.Level.ARTICLE); } catch (IllegalStateException few) { continue; }
+            runExplainer(p);
+            covered.addAll(group);
+            done++;
+        }
+        return done;
     }
 
     /** After the daily download: looks for missed connections of the top {@code n} new stories not checked before. */

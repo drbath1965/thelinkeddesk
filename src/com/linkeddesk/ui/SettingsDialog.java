@@ -26,6 +26,7 @@ final class SettingsDialog extends JDialog {
     private final JCheckBox digest = new JCheckBox("After the daily download, Claude writes a short digest of how the day's events connect");
     private final JSpinner checkLinks = new JSpinner(new SpinnerNumberModel(10, 0, 50, 1));
     private final JSpinner connDaily = new JSpinner(new SpinnerNumberModel(0, 0, 20, 1));
+    private final JSpinner combDaily = new JSpinner(new SpinnerNumberModel(0, 0, 10, 1));
     private final JTextField priceIn = new JTextField(5), priceOut = new JTextField(5);
     private boolean saved;
     // Alerts (P5)
@@ -65,6 +66,7 @@ final class SettingsDialog extends JDialog {
         digest.setSelected(settings.claudeDigest());
         checkLinks.setValue(settings.claudeCheckLinks());
         connDaily.setValue(settings.connectionsDaily());
+        combDaily.setValue(settings.combinedDaily());
         priceIn.setText(settings.priceIn() > 0 ? Double.toString(settings.priceIn()) : "");
         priceOut.setText(settings.priceOut() > 0 ? Double.toString(settings.priceOut()) : "");
 
@@ -236,6 +238,11 @@ final class SettingsDialog extends JDialog {
         conn.add(connDaily);
         conn.add(new JLabel(" new stories (0 = off; about 2-4 cents each)"));
         form.add(conn, g); g.gridy++;
+        JPanel comb = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        comb.add(new JLabel("…and writes one combined article for each of the top "));
+        comb.add(combDaily);
+        comb.add(new JLabel(" linked stories (0 = off; about 4-7 cents each; in the Explainers tab)"));
+        form.add(comb, g); g.gridy++;
         JPanel prices = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         double[] list = com.linkeddesk.ai.Pricing.of(settings.model());
         prices.add(new JLabel("Your prices per million tokens (blank = list price $" + fmt(list[0]) + " in / $" + fmt(list[1]) + " out):  in $"));
@@ -329,6 +336,7 @@ final class SettingsDialog extends JDialog {
         settings.setClaudeDigest(digest.isSelected());
         settings.setClaudeCheckLinks((Integer) checkLinks.getValue());
         settings.setConnectionsDaily((Integer) connDaily.getValue());
+        settings.setCombinedDaily((Integer) combDaily.getValue());
         settings.save();
         saved = true;
         dispose();

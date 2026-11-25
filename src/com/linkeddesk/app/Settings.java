@@ -143,6 +143,13 @@ public final class Settings {
     }
     public synchronized void setConnectionsDaily(int n) { p.setProperty("connectionsDaily", Integer.toString(Math.max(0, Math.min(20, n)))); }
 
+    /** After the daily download: Claude writes one combined article for each of this many top linked stories (0 = off; AI-F10). */
+    public synchronized int combinedDaily() {
+        try { return Math.max(0, Math.min(10, Integer.parseInt(p.getProperty("combinedDaily", "0").trim()))); }
+        catch (NumberFormatException e) { return 0; }
+    }
+    public synchronized void setCombinedDaily(int n) { p.setProperty("combinedDaily", Integer.toString(Math.max(0, Math.min(10, n)))); }
+
     /** Your own prices ($ per million tokens, input and output); 0 = the built-in list price for the model. */
     public synchronized double priceIn() { return dbl("claudePriceIn", 0); }
     public synchronized double priceOut() { return dbl("claudePriceOut", 0); }

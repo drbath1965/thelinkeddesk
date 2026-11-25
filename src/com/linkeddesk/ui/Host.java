@@ -43,6 +43,8 @@ interface Host {
 
     /** Copies a story with its sources to the clipboard; saves it as a file (EXP-F01). */
     default void copyStory(StoryCluster c) { }
+    /** One article from a story and its linked stories (AI-F10). */
+    default void combinedArticle(StoryCluster c) { }
     /** Find connections with Claude (AI-F09): shows the cost, asks, then shows what Claude found on the story. */
     default void findConnections(StoryCluster c) { }
     /** The story on screen that contains any of these articles, or null. */

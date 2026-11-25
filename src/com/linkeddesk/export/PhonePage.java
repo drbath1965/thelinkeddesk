@@ -70,10 +70,14 @@ public final class PhonePage {
         if (!explainers.isEmpty()) {
             h.append("<section id=\"explainers\"><h2>Explainers</h2><p class=\"note\">Written by Claude from the articles cited.</p>");
             for (var x : explainers) {
-                h.append("<h3>").append(esc(x.subject())).append("</h3>");
-                explainerList(h, x, "BOTTOM LINE", null);
-                h.append("<details><summary>More</summary>");
-                for (String s : List.of("CHANGED", "TIMELINE", "WHY IT MATTERS", "WATCH")) explainerList(h, x, s, com.linkeddesk.ai.Explainer.TITLES.get(s));
+                boolean article = x.level() == com.linkeddesk.ai.Explainer.Level.ARTICLE;
+                h.append("<h3>").append(esc(article ? com.linkeddesk.ai.Explainer.headline(x) : x.subject())).append("</h3>");
+                explainerList(h, x, article ? "SUMMARY" : "BOTTOM LINE", null);
+                h.append("<details><summary>").append(article ? "Read the article" : "More").append("</summary>");
+                if (article) {
+                    for (String p : x.sections().getOrDefault("ARTICLE", List.of()))
+                        h.append("<p>").append(com.linkeddesk.ai.Explainer.render(esc(p), x.refs(), s -> "<a class=\"cite\" href=\"" + esc(s.url()) + "\">" + esc(s.source()) + "</a>")).append("</p>");
+                } else for (String s : List.of("CHANGED", "TIMELINE", "WHY IT MATTERS", "WATCH")) explainerList(h, x, s, com.linkeddesk.ai.Explainer.TITLES.get(s));
                 h.append("</details>");
             }
             h.append("</section>\n");
