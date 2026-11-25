@@ -23,7 +23,7 @@ public final class AppPaths {
     }
 
     /** The version shown in the title bar and written into backups. */
-    public static final String VERSION = "1.9.2";
+    public static final String VERSION = "1.10.0";
 
     public static Path dataDir() { return home().resolve("data"); }
     public static Path feedsFile() { return home().resolve("feeds.txt"); }
@@ -32,6 +32,8 @@ public final class AppPaths {
     public static Path aliasesFile() { return home().resolve("aliases.txt"); }
     public static Path stopwordsFile() { return home().resolve("stopwords.txt"); }
     public static Path feedbackFile() { return home().resolve("link-feedback.tsv"); }
+    /** Connections Claude found, and your decisions on them (AI-F09). */
+    public static Path connectionsFile() { return home().resolve("connections.tsv"); }
     public static Path deskRulesFile() { return home().resolve("desk-rules.tsv"); }
     public static Path regionsFile() { return home().resolve("regions.txt"); }
     public static Path calibrationFile() { return home().resolve("calibration.properties"); }

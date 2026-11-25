@@ -25,6 +25,7 @@ final class SettingsDialog extends JDialog {
     private final JTextField budget = new JTextField(6);
     private final JCheckBox digest = new JCheckBox("After the daily download, Claude writes a short digest of how the day's events connect");
     private final JSpinner checkLinks = new JSpinner(new SpinnerNumberModel(10, 0, 50, 1));
+    private final JSpinner connDaily = new JSpinner(new SpinnerNumberModel(0, 0, 20, 1));
     private final JTextField priceIn = new JTextField(5), priceOut = new JTextField(5);
     private boolean saved;
     // Alerts (P5)
@@ -63,6 +64,7 @@ final class SettingsDialog extends JDialog {
         budget.setText(String.format(java.util.Locale.ROOT, "%.2f", settings.claudeBudget()));
         digest.setSelected(settings.claudeDigest());
         checkLinks.setValue(settings.claudeCheckLinks());
+        connDaily.setValue(settings.connectionsDaily());
         priceIn.setText(settings.priceIn() > 0 ? Double.toString(settings.priceIn()) : "");
         priceOut.setText(settings.priceOut() > 0 ? Double.toString(settings.priceOut()) : "");
 
@@ -229,6 +231,11 @@ final class SettingsDialog extends JDialog {
         chk.add(checkLinks);
         chk.add(new JLabel(" new links (0 = off)"));
         form.add(chk, g); g.gridy++;
+        JPanel conn = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        conn.add(new JLabel("…and looks for missed connections of the top "));
+        conn.add(connDaily);
+        conn.add(new JLabel(" new stories (0 = off; about 2-4 cents each)"));
+        form.add(conn, g); g.gridy++;
         JPanel prices = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         double[] list = com.linkeddesk.ai.Pricing.of(settings.model());
         prices.add(new JLabel("Your prices per million tokens (blank = list price $" + fmt(list[0]) + " in / $" + fmt(list[1]) + " out):  in $"));
@@ -321,6 +328,7 @@ final class SettingsDialog extends JDialog {
         settings.setPhoneFolder(phoneFolder.getText());
         settings.setClaudeDigest(digest.isSelected());
         settings.setClaudeCheckLinks((Integer) checkLinks.getValue());
+        settings.setConnectionsDaily((Integer) connDaily.getValue());
         settings.save();
         saved = true;
         dispose();

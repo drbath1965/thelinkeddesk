@@ -22,6 +22,7 @@ final class StoryPane extends JScrollPane {
     private SearchQuery highlight;
     private String emptyMessage = "Nothing to show.";
     private StoryCluster current;
+    private java.util.List<com.linkeddesk.store.ConnectionStore.Entry> suggestions;
     private boolean userPick;
     /** Opens a linked story (by id); the owner decides how (select it in a list, or just show it here). */
     Consumer<String> openStory = id -> { };
@@ -58,8 +59,10 @@ final class StoryPane extends JScrollPane {
         if (c == null) { detail.setText(Html.empty(emptyMessage)); current = null; return; }
         var reads = host.service().reads();
         int pos = fresh ? 0 : detail.getCaretPosition();
+        var cs = host.service().connections();
+        suggestions = cs.suggestions(c);
         detail.setText(Html.story(c, true, highlight, true, new Html.Extras(reads.isStarred(c), host.service().regions().spread(c), reads.hasNewSinceRead(c),
-                (a, b) -> host.service().linkChecks().find(a, b), host.service().store()::hasFullText)));
+                (a, b) -> host.service().linkChecks().find(a, b), host.service().store()::hasFullText, suggestions, cs.checked(c), host::storyWithArticles)));
         detail.setCaretPosition(Math.min(pos, detail.getDocument().getLength()));
         current = c;
         if (fresh && startTimer) readTimer.restart();
@@ -127,6 +130,16 @@ final class StoryPane extends JScrollPane {
         } else if (href.startsWith("full:") && current != null) {
             String id = href.substring(5);
             current.articles.stream().filter(a -> a.id.equals(id)).findFirst().ifPresent(this::showFullText);
+        } else if (href.equals("connect:") && current != null) {
+            host.findConnections(current);
+        } else if ((href.startsWith("conn-accept:") || href.startsWith("conn-reject:")) && current != null) {
+            boolean accept = href.startsWith("conn-accept:");
+            int i = Integer.parseInt(href.substring(href.indexOf(':') + 1));
+            if (suggestions != null && i < suggestions.size()) {
+                var entry = suggestions.get(i);
+                correct(() -> host.service().decideConnection(entry, accept), accept ? "Connection accepted: it's now one of this story's links."
+                        : "Connection rejected: it won't be suggested again.");
+            }
         } else if (href.equals("explain:") && current != null) {
             host.explainSubject(current.headline, java.util.List.of(current));
         } else if (href.equals("framing:") && current != null) {

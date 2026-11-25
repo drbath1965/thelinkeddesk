@@ -22,6 +22,10 @@ public final class TestAccess {
         }
     }
 
+    public static String storyHtml(com.linkeddesk.model.StoryCluster c, java.util.List<com.linkeddesk.store.ConnectionStore.Entry> sugg, long checked) {
+        return Html.story(c, true, null, true, new Html.Extras(false, null, false, null, null, sugg, checked, ids -> null));
+    }
+
     public static String explainerHtml(com.linkeddesk.ai.Explainer.Result r) { return Html.explainer(r, ""); }
 
     public static String framingHtml(com.linkeddesk.ai.Framing.Result r) { return Html.framing(r, ""); }

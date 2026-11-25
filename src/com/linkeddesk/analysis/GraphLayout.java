@@ -20,7 +20,7 @@ import java.util.function.Predicate;
  * always get the same picture.
  */
 public final class GraphLayout {
-    public record Edge(int a, int b, double weight, boolean crossDesk, boolean confirmed, List<String> terms) {}
+    public record Edge(int a, int b, double weight, boolean crossDesk, boolean confirmed, List<String> terms, boolean byClaude) {}
 
     public final List<StoryCluster> nodes;
     public final List<Edge> edges;
@@ -69,7 +69,7 @@ public final class GraphLayout {
                 if (j == null || j == i) continue;
                 long key = (long) Math.min(i, j) << 32 | Math.max(i, j);
                 if (!seen.add(key)) continue;
-                edges.add(new Edge(i, j, l.score(), l.crossDesk(), l.confirmed(), l.sharedTerms()));
+                edges.add(new Edge(i, j, l.score(), l.crossDesk(), l.confirmed(), l.sharedTerms(), l.byClaude()));
             }
         }
         GraphLayout g = new GraphLayout(pick, edges, matched);

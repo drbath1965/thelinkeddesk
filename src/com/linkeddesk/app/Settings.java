@@ -136,6 +136,13 @@ public final class Settings {
     }
     public synchronized void setClaudeCheckLinks(int n) { p.setProperty("claudeCheckLinks", Integer.toString(Math.max(0, Math.min(50, n)))); }
 
+    /** After the daily download: Claude looks for missed connections of this many top new stories (0 = off; AI-F09). */
+    public synchronized int connectionsDaily() {
+        try { return Math.max(0, Math.min(20, Integer.parseInt(p.getProperty("connectionsDaily", "0").trim()))); }
+        catch (NumberFormatException e) { return 0; }
+    }
+    public synchronized void setConnectionsDaily(int n) { p.setProperty("connectionsDaily", Integer.toString(Math.max(0, Math.min(20, n)))); }
+
     /** Your own prices ($ per million tokens, input and output); 0 = the built-in list price for the model. */
     public synchronized double priceIn() { return dbl("claudePriceIn", 0); }
     public synchronized double priceOut() { return dbl("claudePriceOut", 0); }

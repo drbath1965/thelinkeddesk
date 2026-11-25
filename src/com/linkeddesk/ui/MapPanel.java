@@ -262,10 +262,10 @@ final class MapPanel extends JPanel {
             // links
             for (GraphLayout.Edge e : g.edges) {
                 boolean lit = focus != null && (g.nodes.get(e.a()) == focus || g.nodes.get(e.b()) == focus);
-                Color c = lit ? Theme.text() : e.crossDesk() ? Theme.desk(Category.TECH) : Theme.lineColor();
+                Color c = lit ? Theme.text() : e.byClaude() ? Theme.c(Theme.star()) : e.crossDesk() ? Theme.desk(Category.TECH) : Theme.lineColor();
                 int alpha = lit ? 230 : focus != null ? 50 : e.crossDesk() ? 150 : 200;
                 gr.setColor(new Color(c.getRed(), c.getGreen(), c.getBlue(), alpha));
-                float w = (float) (0.8 + 4 * Math.min(0.5, e.weight())) * (float) Math.min(1.6, Math.max(0.6, s));
+                float w = (float) (0.8 + 4 * Math.min(0.5, Math.max(e.byClaude() ? 0.2 : 0, e.weight()))) * (float) Math.min(1.6, Math.max(0.6, s));
                 gr.setStroke(e.confirmed() ? new BasicStroke(w + 1) : e.crossDesk()
                         ? new BasicStroke(w, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND, 1f, new float[]{6f, 4f}, 0f) : new BasicStroke(w));
                 gr.draw(new Line2D.Double(pts[e.a()], pts[e.b()]));
@@ -318,7 +318,7 @@ final class MapPanel extends JPanel {
                 gr.drawString(c.label(), lx + 14, ly);
                 lx += 22 + fm.stringWidth(c.label());
             }
-            gr.drawString("· dashed = link across desks · thick = confirmed by you", lx, ly);
+            gr.drawString("· dashed = link across desks · thick = confirmed by you · gold = found by Claude", lx, ly);
             gr.dispose();
         }
     }

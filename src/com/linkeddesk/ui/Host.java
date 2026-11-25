@@ -43,6 +43,10 @@ interface Host {
 
     /** Copies a story with its sources to the clipboard; saves it as a file (EXP-F01). */
     default void copyStory(StoryCluster c) { }
+    /** Find connections with Claude (AI-F09): shows the cost, asks, then shows what Claude found on the story. */
+    default void findConnections(StoryCluster c) { }
+    /** The story on screen that contains any of these articles, or null. */
+    default StoryCluster storyWithArticles(java.util.Set<String> ids) { return null; }
     /** Explain a subject (AI-F08) from these stories, or (seed empty) from a search of the archive. */
     default void explainSubject(String subject, java.util.List<StoryCluster> seed) { }
     /** How the outlets in a story framed it (AI-F07). */

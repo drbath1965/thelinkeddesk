@@ -662,6 +662,58 @@ public final class MainWindow extends JFrame implements Host {
                 + ". Paste into Word, Outlook or Gmail and the links come along.");
     }
 
+    @Override public StoryCluster storyWithArticles(java.util.Set<String> ids) {
+        if (result == null || ids == null) return null;
+        for (StoryCluster c : result.stories()) for (com.linkeddesk.model.Article a : c.articles) if (ids.contains(a.id)) return c;
+        return null;
+    }
+
+    /** Find connections with Claude (AI-F09): candidates and cost first, then Claude, then the story page shows them. */
+    @Override public void findConnections(StoryCluster c) {
+        service.settings().reload();
+        if (!service.settings().hasApiKey()) {
+            JOptionPane.showMessageDialog(this, "Finding connections uses Claude: add an Anthropic API key in Tools > Settings > Claude.", "Find connections", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        List<StoryCluster> window = result == null ? List.of() : result.stories();
+        setBusy("Gathering stories that might be connected…");
+        new SwingWorker<NewsService.ConnectPlan, Void>() {
+            @Override protected NewsService.ConnectPlan doInBackground() throws Exception { return service.planConnections(c, window); }
+            @Override protected void done() {
+                busy.setVisible(false);
+                updateStatus();
+                NewsService.ConnectPlan plan;
+                try { plan = get(); }
+                catch (Exception ex) { JOptionPane.showMessageDialog(MainWindow.this, firstMessage(ex), "Find connections", JOptionPane.INFORMATION_MESSAGE); return; }
+                if (!plan.cached()) {
+                    long other = plan.candidates().stream().filter(x -> x.story().category != c.category).count();
+                    String msg = "<html><b>Find connections for:</b><br>" + Html.esc(c.headline) + "<br><br>Claude will look at " + plan.candidates().size()
+                            + " other stories (" + other + " from other desks) and say which are really connected, and how."
+                            + String.format("<br><br>This could cost up to <b>$%.3f</b>. You've used $%.2f of your $%.2f this month.", plan.estimate(), plan.spent(), plan.budget())
+                            + (plan.spent() + plan.estimate() > plan.budget() ? "<br><span style='color:" + Theme.bad() + "'>That would pass your monthly budget, so it won't be sent.</span>" : "")
+                            + "</html>";
+                    if (JOptionPane.showConfirmDialog(MainWindow.this, msg, "Find connections", JOptionPane.OK_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE) != JOptionPane.OK_OPTION) return;
+                }
+                setBusy("Claude is looking for connections…");
+                new SwingWorker<com.linkeddesk.ai.Connections.Result, Void>() {
+                    @Override protected com.linkeddesk.ai.Connections.Result doInBackground() throws Exception { return service.runConnections(plan); }
+                    @Override protected void done() {
+                        busy.setVisible(false);
+                        updateStatus();
+                        try {
+                            var r = get();
+                            status.setText(r.found().isEmpty() ? "Claude found no further connections for this story."
+                                    : "Claude found " + r.found().size() + (r.found().size() == 1 ? " connection" : " connections") + ": see the story page.");
+                            for (StoryBrowser b : List.of(stories, saved, search.browser(), watchPanel.browser(), markets.browser(), sincePanel.browser())) b.refreshDetail();
+                        } catch (Exception ex) {
+                            JOptionPane.showMessageDialog(MainWindow.this, firstMessage(ex), "Find connections", JOptionPane.WARNING_MESSAGE);
+                        }
+                    }
+                }.execute();
+            }
+        }.execute();
+    }
+
     /**
      * Explain this (AI-F08). One story is widened to its storyline and strongly linked stories, so the explainer has
      * more than one day's coverage to piece together.

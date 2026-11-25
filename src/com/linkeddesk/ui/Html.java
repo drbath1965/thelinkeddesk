@@ -69,7 +69,12 @@ final class Html {
     /** What the page shows besides the story itself: your star, and how its coverage spreads over regions. */
     record Extras(boolean starred, com.linkeddesk.analysis.Regions.Spread spread, boolean newSinceRead,
                   java.util.function.BiFunction<StoryCluster, StoryCluster, com.linkeddesk.ai.LinkChecks.Check> checks,
-                  java.util.function.Predicate<Article> hasFullText) {
+                  java.util.function.Predicate<Article> hasFullText,
+                  java.util.List<com.linkeddesk.store.ConnectionStore.Entry> suggestions, long connectionsChecked,
+                  java.util.function.Function<java.util.Set<String>, StoryCluster> storyOf) {
+        Extras(boolean starred, com.linkeddesk.analysis.Regions.Spread spread, boolean newSinceRead,
+               java.util.function.BiFunction<StoryCluster, StoryCluster, com.linkeddesk.ai.LinkChecks.Check> checks,
+               java.util.function.Predicate<Article> hasFullText) { this(starred, spread, newSinceRead, checks, hasFullText, null, 0, null); }
         Extras(boolean starred, com.linkeddesk.analysis.Regions.Spread spread, boolean newSinceRead) { this(starred, spread, newSinceRead, null, null); }
         Extras(boolean starred, com.linkeddesk.analysis.Regions.Spread spread, boolean newSinceRead,
                java.util.function.BiFunction<StoryCluster, StoryCluster, com.linkeddesk.ai.LinkChecks.Check> checks) { this(starred, spread, newSinceRead, checks, null); }
@@ -143,12 +148,14 @@ final class Html {
                   .append("<a href='story:").append(o.id).append("'>").append(esc(o.headline)).append("</a><br>")
                   .append("<span class='meta'>").append(esc(o.category.label())).append(l.crossDesk() ? " (other desk)" : "")
                   .append(" · ").append(l.strength()).append(" link · ").append(ago(o.lastSeen)).append("</span><br>")
-                  .append("<span class='terms'>Shared: ").append(l.sharedTerms().isEmpty() ? "no key words (you linked these)" : esc(String.join(", ", l.sharedTerms()))).append("</span>");
+                  .append(l.byClaude() ? "<span class='terms'><b>Found by Claude · " + esc(l.claudeKind()) + ":</b> " + esc(l.claudeReason()) + "</span>"
+                          : "<span class='terms'>Shared: " + (l.sharedTerms().isEmpty() ? "no key words (you linked these)" : esc(String.join(", ", l.sharedTerms()))) + "</span>");
                 if (canExplain) sb.append(" · <a href='explain:").append(o.id).append("'>Ask Claude why</a>");
                 var chk = x == null || x.checks() == null ? null : x.checks().apply(c, o);
                 if (chk != null) sb.append("<br>").append(checkBadge(chk));
                 if (corrections) {
-                    if (l.confirmed()) sb.append("<br><span class='ok'>✓ You marked this link right</span> <span class='act'><a href='undo:").append(o.id).append("'>undo</a></span>");
+                    if (l.confirmed()) sb.append("<br><span class='ok'>✓ ").append(l.byClaude() ? "You accepted this connection" : "You marked this link right")
+                            .append("</span> <span class='act'><a href='undo:").append(o.id).append("'>undo</a></span>");
                     else sb.append("<br><span class='act'>Is this link right? <a href='good:").append(o.id).append("'>✓ Right</a> · <a href='bad:")
                             .append(o.id).append("'>✗ Wrong</a></span>");
                 }
@@ -156,6 +163,7 @@ final class Html {
             }
             sb.append("</table>");
         }
+        sb.append(connectionsSection(c, x, canExplain));
         if (c.hiddenLinks > 0) {
             sb.append("<p class='act'>").append(c.hiddenLinks).append(c.hiddenLinks == 1 ? " link you marked wrong is" : " links you marked wrong are")
               .append(" hidden. Tools &gt; Your corrections lists them.</p>");
@@ -336,6 +344,40 @@ final class Html {
     }
 
     private static final java.time.format.DateTimeFormatter XWHEN = java.time.format.DateTimeFormatter.ofPattern("MMM d, h:mm a").withZone(java.time.ZoneId.systemDefault());
+
+    /** "Connections Claude found" (AI-F09): open suggestions grouped by kind, each to open, accept or reject. */
+    static String connectionsSection(StoryCluster c, Extras x, boolean canAsk) {
+        StringBuilder sb = new StringBuilder();
+        var sugg = x == null || x.suggestions() == null ? java.util.List.<com.linkeddesk.store.ConnectionStore.Entry>of() : x.suggestions();
+        long checked = x == null ? 0 : x.connectionsChecked();
+        if (!canAsk && sugg.isEmpty()) return "";
+        sb.append("<h2>Connections Claude found").append(sugg.isEmpty() ? "" : " (" + sugg.size() + ")").append("</h2>");
+        if (sugg.isEmpty()) {
+            sb.append("<p class='meta'>").append(checked > 0 ? "No open suggestions from Claude's last look (" + ago(checked) + "); any you accepted are among the links above. "
+                    : "The links above come from shared words. Claude can look for stories connected in other ways: cause and effect, earlier chapters, the same people, conflicting accounts. ")
+              .append("<a href='connect:'>").append(checked > 0 ? "Look again" : "Find connections (Claude)").append("</a></p>");
+            return sb.toString();
+        }
+        sb.append("<p class='meta'>Suggested ").append(ago(checked)).append(". Accept one to add it to the links, the map and threads; reject it and it won't be suggested again. ")
+          .append("<a href='connect:'>Look again</a></p>");
+        java.util.Map<com.linkeddesk.ai.Connections.Kind, java.util.List<Integer>> byKind = new java.util.EnumMap<>(com.linkeddesk.ai.Connections.Kind.class);
+        for (int i = 0; i < sugg.size(); i++) byKind.computeIfAbsent(sugg.get(i).kind(), k -> new java.util.ArrayList<>()).add(i);
+        for (var k : byKind.entrySet()) {
+            sb.append("<h3>").append(esc(k.getKey().label)).append("</h3><table>");
+            for (int i : k.getValue()) {
+                var e = sugg.get(i);
+                StoryCluster o = x.storyOf() == null ? null : x.storyOf().apply(e.b());
+                String href = o != null ? "story:" + o.id : e.urlB();
+                sb.append("<tr><td width='8' bgcolor='").append(o == null ? Theme.muted() : Theme.deskHex(o.category)).append("'></td><td><a href='")
+                  .append(esc(href)).append("'>").append(esc(o != null ? o.headline : e.headlineB())).append("</a><br><span class='terms'>")
+                  .append(esc(e.reason())).append("</span><br><span class='meta'>").append(e.confidence() == null ? "" : e.confidence().label() + " confidence")
+                  .append(o == null ? " · older story, opens the article" : " · " + esc(o.category.label()) + " · " + ago(o.lastSeen)).append("</span>")
+                  .append(" <span class='act'>· <a href='conn-accept:").append(i).append("'>✓ Accept</a> · <a href='conn-reject:").append(i).append("'>✗ Reject</a></span></td></tr>");
+            }
+            sb.append("</table>");
+        }
+        return sb.toString();
+    }
 
     /** An explainer (AI-F08): sections with linked citations, "more" on each point, follow-ups, and the articles read. */
     static String explainer(com.linkeddesk.ai.Explainer.Result r, String budget) {

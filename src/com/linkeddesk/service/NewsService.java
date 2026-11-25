@@ -293,6 +293,7 @@ public final class NewsService {
 
     /** Stories about a company you follow also show in Finance (ALR-F05). */
     private Analyzer.Result tieTickers(Analyzer.Result r) {
+        tagClaudeLinks(r);
         var t = tickers();
         if (t.isEmpty()) return r;
         for (StoryCluster c : r.stories()) {
@@ -672,6 +673,10 @@ public final class NewsService {
             if (settings.claudeDigest()) { writeDigest(b, false); sb.append("Digest written. "); }
             int n = checkLinks(b, settings.claudeCheckLinks());
             sb.append(n).append(" links checked. ");
+            if (settings.connectionsDaily() > 0) {
+                int k = dailyConnections(b.result(), settings.connectionsDaily());
+                sb.append(k).append(k == 1 ? " story" : " stories").append(" checked for missed connections. ");
+            }
         } catch (com.linkeddesk.ai.ClaudeService.BudgetException e) {
             sb.append(e.getMessage());
         } catch (Exception e) {
@@ -766,6 +771,104 @@ public final class NewsService {
         else if (q.contains("last month")) from = d.minusDays(62);
         else if (q.contains("this year")) from = d.withDayOfYear(1);
         return from == null ? 0 : from.atStartOfDay(z).toInstant().toEpochMilli();
+    }
+
+    // ------------------------------------------------------------------ connections (AI-F09)
+
+    private com.linkeddesk.store.ConnectionStore connections;
+
+    public synchronized com.linkeddesk.store.ConnectionStore connections() {
+        if (connections == null) connections = new com.linkeddesk.store.ConnectionStore(AppPaths.connectionsFile());
+        return connections;
+    }
+
+    /** What a connections check will send and cost, shown before anything is sent. */
+    public record ConnectPlan(StoryCluster target, List<com.linkeddesk.ai.Connections.Candidate> candidates, String prompt,
+                              double estimate, boolean cached, double spent, double budget) {}
+
+    /**
+     * The candidates Claude will look at for {@code target}: the stories now on screen ({@code window}) plus older
+     * stories in the archive that share its names, leaving out ones already linked and pairs you decided on.
+     */
+    public ConnectPlan planConnections(StoryCluster target, List<StoryCluster> window) throws IOException {
+        List<StoryCluster> pool = new ArrayList<>(window == null ? List.of() : window);
+        List<String> names = new ArrayList<>();
+        if (target.keyTerms != null) for (String t : target.keyTerms) if (!t.isEmpty() && Character.isUpperCase(t.charAt(0)) && names.size() < 4) names.add(t);
+        if (!names.isEmpty()) {
+            try { pool.addAll(findForQuestion(String.join(" ", names), new int[1], 25)); } catch (Exception ignored) { }
+        }
+        var store = connections();
+        var cands = com.linkeddesk.ai.Connections.candidates(target, pool, com.linkeddesk.ai.Connections.MAX_CANDIDATES,
+                (x, y) -> store.decision(x, y) != null, System.currentTimeMillis());
+        if (cands.isEmpty()) throw new IllegalStateException("There are no other stories to compare this one with yet (stories already linked to it are left out).");
+        String prompt = com.linkeddesk.ai.Connections.prompt(target, cands);
+        var c = claude();
+        return new ConnectPlan(target, cands, prompt, c.estimate(prompt, com.linkeddesk.ai.Connections.MAX_TOKENS),
+                c.isCached("connections", prompt, com.linkeddesk.ai.Connections.MAX_TOKENS), c.spentThisMonth(), c.budget());
+    }
+
+    /** Asks Claude, saves what it found as suggestions on the story, and returns it. */
+    public com.linkeddesk.ai.Connections.Result runConnections(ConnectPlan plan) throws Exception {
+        String reply = claude().ask("connections", plan.prompt(), com.linkeddesk.ai.Connections.MAX_TOKENS);
+        var r = com.linkeddesk.ai.Connections.parse(reply, plan.target(), plan.candidates());
+        connections().record(r, System.currentTimeMillis());
+        return r;
+    }
+
+    /**
+     * Accept or reject a connection Claude suggested. Accepting makes it a link you confirmed (shown on the map, in
+     * threads and storylines, marked "found by Claude"); rejecting keeps it from being suggested again and hides any
+     * word link between the two stories.
+     */
+    public synchronized void decideConnection(com.linkeddesk.store.ConnectionStore.Entry e, boolean accept) throws IOException {
+        connections().decide(e, accept);
+        Feedback fb = Feedback.load(AppPaths.feedbackFile());
+        fb.add(new Feedback.Entry(accept ? Feedback.Kind.RIGHT : Feedback.Kind.WRONG, System.currentTimeMillis(), e.a(), e.b(), List.of(), e.headlineA(), e.headlineB()));
+        fb.save(AppPaths.feedbackFile());
+        changed();
+    }
+
+    /** Marks the links that are connections you accepted, with Claude's kind and reason. */
+    private void tagClaudeLinks(Analyzer.Result r) {
+        List<com.linkeddesk.store.ConnectionStore.Entry> acc;
+        try { acc = connections().accepted(); } catch (Exception e) { return; }
+        if (acc.isEmpty()) return;
+        java.util.Map<String, StoryCluster> byArticle = new java.util.HashMap<>();
+        for (StoryCluster c : r.stories()) for (Article a : c.articles) byArticle.put(a.id, c);
+        java.util.Map<StoryCluster, java.util.Map<StoryCluster, com.linkeddesk.store.ConnectionStore.Entry>> tags = new java.util.IdentityHashMap<>();
+        for (var e : acc) {
+            java.util.Set<StoryCluster> as = new java.util.HashSet<>(), bs = new java.util.HashSet<>();
+            for (String id : e.a()) { StoryCluster c = byArticle.get(id); if (c != null) as.add(c); }
+            for (String id : e.b()) { StoryCluster c = byArticle.get(id); if (c != null) bs.add(c); }
+            for (StoryCluster x : as) for (StoryCluster y : bs) if (x != y) {
+                tags.computeIfAbsent(x, k -> new java.util.IdentityHashMap<>()).put(y, e);
+                tags.computeIfAbsent(y, k -> new java.util.IdentityHashMap<>()).put(x, e);
+            }
+        }
+        for (var t : tags.entrySet()) {
+            List<com.linkeddesk.model.StoryLink> links = t.getKey().links;
+            for (int i = 0; i < links.size(); i++) {
+                var e = t.getValue().get(links.get(i).to());
+                if (e != null && e.kind() != null) links.set(i, links.get(i).withClaude(e.kind().label, e.reason()));
+            }
+        }
+    }
+
+    /** After the daily download: looks for missed connections of the top {@code n} new stories not checked before. */
+    public int dailyConnections(Analyzer.Result r, int n) throws Exception {
+        long since = System.currentTimeMillis() - 30 * 3_600_000L;
+        List<StoryCluster> fresh = new ArrayList<>();
+        for (StoryCluster c : r.stories()) if (c.firstSeen >= since && connections().checked(c) == 0) fresh.add(c);
+        fresh.sort(java.util.Comparator.comparingInt(StoryCluster::independentCount).reversed());
+        int done = 0;
+        for (StoryCluster c : fresh) {
+            if (done >= n) break;
+            ConnectPlan p;
+            try { p = planConnections(c, r.stories()); } catch (IllegalStateException empty) { continue; }
+            runConnections(p);
+            done++;
+        }
+        return done;
     }
 
     // ------------------------------------------------------------------ explainers (AI-F08)
