@@ -7,13 +7,13 @@ import java.awt.*;
 
 /** A plain-text editor for feeds.txt: one "Category | Name | URL" per line. */
 final class FeedEditorDialog extends JDialog {
-    FeedEditorDialog(Window owner) {
+    FeedEditorDialog(Window owner) throws java.io.IOException {
         super(owner, "Feed list", ModalityType.APPLICATION_MODAL);
         JTextArea text = new JTextArea(FeedCatalog.rawText(), 28, 110);
         text.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 13));
         text.setCaretPosition(0);
         JLabel help = new JLabel("<html>One feed per line: <b>Category | Source name | Feed URL</b>. "
-                + "Categories: World, Finance, Politics, Society, Tech. Lines starting with # are ignored.</html>");
+                + "Categories: World, Finance, Politics, Society, Tech, Defense. Lines starting with # are ignored.</html>");
         help.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
         JButton save = new JButton("Save");

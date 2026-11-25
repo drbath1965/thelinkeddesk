@@ -19,6 +19,7 @@ final class BriefingPanel extends JPanel {
     private Briefing briefing;
     private com.linkeddesk.ai.Digest digest;
     private int run;
+    private java.util.List<com.linkeddesk.service.NewsService.Upcoming> coming = java.util.List.of();
 
     BriefingPanel(Host host) {
         super(new BorderLayout());
@@ -36,6 +37,10 @@ final class BriefingPanel extends JPanel {
                 if (c != null) story.show(c, true);
             } else if (href.equals("digest:") || href.equals("digest-again:")) {
                 claude("Claude is writing today's digest…", () -> { digest = host.service().writeDigest(briefing, href.equals("digest-again:")); return "Digest written."; });
+            } else if (href.equals("comingup:")) {
+                host.showComingUp();
+            } else if (href.startsWith("http")) {
+                try { Desktop.getDesktop().browse(java.net.URI.create(href)); } catch (Exception ex) { com.linkeddesk.app.Logs.error("Opening " + href, ex); }
             } else if (href.equals("check:")) {
                 claude("Claude is checking today's top links…", () -> {
                     int n = host.service().checkLinks(briefing, Math.max(1, host.service().settings().claudeCheckLinks()));
@@ -69,6 +74,7 @@ final class BriefingPanel extends JPanel {
             @Override protected Briefing doInBackground() throws Exception {
                 Briefing b = host.service().briefing();
                 digest = host.service().todaysDigest();
+                try { coming = host.service().comingUp(14); } catch (Exception ex) { com.linkeddesk.app.Logs.error("Finding upcoming events", ex); }
                 return b;
             }
             @Override protected void done() {
@@ -95,11 +101,19 @@ final class BriefingPanel extends JPanel {
             return com.linkeddesk.ai.Cite.find(digest.refs().get(id), briefing.result().stories());
         };
         String digestHtml = Html.digest(digest, ref, svc.settings().hasApiKey(), svc.claude().summary());
-        page.setText(Html.briefing(briefing, svc.reads(), svc.regions(), digestHtml));
+        java.util.Map<String, StoryCluster> byArticle = new java.util.HashMap<>();
+        for (StoryCluster c : briefing.result().stories()) for (var a : c.articles) byArticle.put(a.id, c);
+        String upcoming = Html.comingUp(coming, 6, false, a -> byArticle.get(a.id));
+        page.setText(Html.briefing(briefing, svc.reads(), svc.regions(), digestHtml + upcoming));
         SwingUtilities.invokeLater(() -> ((JViewport) page.getParent()).setViewPosition(p));
     }
 
     void refreshPage() { rerender(); story.refresh(); }
+
+    /** The briefing as plain text (for reading aloud). */
+    String pageText() {
+        try { return page.getDocument().getText(0, page.getDocument().getLength()); } catch (Exception e) { return ""; }
+    }
 
     private interface Job { String run() throws Exception; }
 

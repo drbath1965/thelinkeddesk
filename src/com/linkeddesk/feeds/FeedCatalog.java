@@ -61,17 +61,15 @@ public final class FeedCatalog {
         }
     }
 
-    public static String rawText() {
-        try {
-            load();
-            return Files.readString(AppPaths.feedsFile(), StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            return DEFAULT_FEEDS;
-        }
+    /** The feed list as text for the editor. Throws if feeds.txt exists but can't be read (so the defaults never replace it). */
+    public static String rawText() throws IOException {
+        load();
+        String s = com.linkeddesk.app.SafeFiles.readString(AppPaths.feedsFile());
+        return s.isEmpty() && !Files.exists(AppPaths.feedsFile()) ? DEFAULT_FEEDS : s;
     }
 
     public static void saveRawText(String text) throws IOException {
-        Files.writeString(AppPaths.feedsFile(), text, StandardCharsets.UTF_8);
+        com.linkeddesk.app.SafeFiles.write(AppPaths.feedsFile(), text);
     }
 
     public static List<FeedSource> parse(String text) {

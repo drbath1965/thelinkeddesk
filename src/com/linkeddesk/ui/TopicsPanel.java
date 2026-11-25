@@ -40,6 +40,7 @@ final class TopicsPanel extends JPanel {
         delete.addActionListener(e -> deleteTopic());
         now.addActionListener(e -> downloadSelected());
         explain.setToolTipText("Claude reads this topic's articles and explains the subject");
+        Html.claudeOnly(explain);
         explain.addActionListener(e -> { Topic t = list.getSelectedValue(); if (t != null) host.explainSubject(t.name(), browser.shown()); });
         JPanel buttons = new JPanel(new GridLayout(0, 2, 6, 6));
         buttons.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
@@ -197,9 +198,13 @@ final class TopicsPanel extends JPanel {
         reload(keep);
     }
 
-    void addTopic() {
+    void addTopic() { addTopic(null, null); }
+
+    /** Add topic…, prefilled with a name and search words when given (from a person or organization page). */
+    void addTopic(String name, String words) {
         List<Topic> all = new ArrayList<>(TopicCatalog.load());
-        TopicEditor ed = new TopicEditor(SwingUtilities.getWindowAncestor(this), null, all, true);
+        Topic draft = name == null ? null : new Topic(com.linkeddesk.model.Category.WORLD, name, words, "en-US", false);
+        TopicEditor ed = new TopicEditor(SwingUtilities.getWindowAncestor(this), draft, all, true);
         ed.setVisible(true);
         Topic t = ed.result();
         if (t == null) return;

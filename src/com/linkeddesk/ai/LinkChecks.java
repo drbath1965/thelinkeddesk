@@ -45,7 +45,7 @@ public final class LinkChecks {
                     checks.add(new Check(set(p[0]), set(p[1]), Verdict.valueOf(p[2]), p[3], Long.parseLong(p[4]), p.length > 5 ? p[5] : ""));
                 } catch (RuntimeException ignored) { }
             }
-        } catch (IOException ignored) { }
+        } catch (IOException ex) { com.linkeddesk.app.Logs.error("Reading link checks", ex); }
         return this;
     }
 

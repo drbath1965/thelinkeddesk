@@ -133,7 +133,7 @@ final class MapPanel extends JPanel {
                     info.setText(String.format("%,d stories, %,d links%s · %.1f s", layout.nodes.size(), layout.edges.size(),
                             layout.matched > layout.nodes.size() ? " (the " + layout.nodes.size() + " most connected of " + String.format("%,d", layout.matched) + ")" : "",
                             ms / 1000.0));
-                } catch (Exception ex) { info.setText("Could not draw the map: " + ex.getMessage()); }
+                } catch (Exception ex) { com.linkeddesk.app.Logs.error("Drawing the connection map", ex); info.setText("Could not draw the map: " + ex.getMessage()); }
             }
         }.execute();
     }

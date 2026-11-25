@@ -56,6 +56,8 @@ public final class SelfCheck {
         public int screenW, screenH, windowW, windowH;
         public double scale = 1;
         public String latestVersion, updateError;  // from the update check, if it ran
+        public List<String> fileProblems = new ArrayList<>(), errorsThisWeek = new ArrayList<>();
+        public boolean settingsUnreadable;
     }
 
     public static Facts gather(NewsService s, Window window) {
@@ -68,6 +70,9 @@ public final class SelfCheck {
             catch (Exception e) { f.task = null; f.taskError = e.getMessage(); }
             f.taskRunsThisCopy = WindowsTask.runsThisCopy();
         }
+        f.fileProblems = com.linkeddesk.app.SafeFiles.problems();
+        f.errorsThisWeek = com.linkeddesk.app.Logs.errorsSince(java.time.LocalDateTime.now().minusDays(7));
+        f.settingsUnreadable = st.unreadable();
         f.hasKey = st.hasApiKey();
         String k = f.hasKey ? st.apiKey() : "";
         f.keyReadable = !k.isEmpty();
@@ -202,6 +207,24 @@ public final class SelfCheck {
             Status st = days > 14 ? Status.WARN : Status.OK;
             out.add(new Check("Backup", st, "Last backup " + (days == 0 ? "today" : days + " day(s) ago") + (f.backupWeekly ? "; weekly backups on." : "; weekly backups off."),
                     st == Status.WARN || !f.backupWeekly ? "Tools > Archive and backup: Back up now, and turn on weekly backups." : ""));
+        }
+
+        // Saved files and logged errors (OPS-F08, OPS-F09)
+        if (f.settingsUnreadable) out.add(new Check("Saved files", Status.FAIL, "settings.properties can't be read, so settings aren't being saved (nothing has been lost).",
+                "Close other programs that may lock it (a sync tool or antivirus), then restart the app."));
+        else if (!f.fileProblems.isEmpty()) out.add(new Check("Saved files", Status.WARN, f.fileProblems.size() + (f.fileProblems.size() == 1 ? " read problem" : " read problems")
+                + " since the app started; the latest: " + f.fileProblems.get(f.fileProblems.size() - 1) + ".",
+                "Nothing was saved over. If it keeps happening, exclude the data folder from your antivirus or sync tool."));
+        else out.add(new Check("Saved files", Status.OK, "Every file read and saved normally; a backup copy (.bak) is kept of each.", ""));
+        if (!f.errorsThisWeek.isEmpty()) {
+            java.util.Map<String, Integer> kinds = new java.util.LinkedHashMap<>();
+            List<String> newest = new ArrayList<>(f.errorsThisWeek);
+            Collections.reverse(newest);
+            for (String e : newest) kinds.merge(e.length() > 70 ? e.substring(0, 70) + "…" : e, 1, Integer::sum);
+            StringBuilder d = new StringBuilder(f.errorsThisWeek.size() + (f.errorsThisWeek.size() == 1 ? " error" : " errors") + " logged in the last 7 days, newest first: ");
+            int i = 0;
+            for (var k : kinds.entrySet()) { if (i++ == 3) { d.append("…"); break; } d.append(i > 1 ? "; " : "").append(k.getKey()).append(k.getValue() > 1 ? " (×" + k.getValue() + ")" : ""); }
+            out.add(new Check("Errors this week", Status.INFO, d.toString(), "View > Logs > Errors has the details; Save report… and send it to have them looked at."));
         }
 
         // Screen

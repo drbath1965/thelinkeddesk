@@ -134,7 +134,7 @@ public final class ClaudeService {
                     out.add(new Call(t, p[1], p[2], Long.parseLong(p[3]), Long.parseLong(p[4]), Double.parseDouble(p[5])));
                 } catch (RuntimeException ignored) { }
             }
-        } catch (IOException ignored) { }
+        } catch (IOException ex) { com.linkeddesk.app.Logs.error("Reading the Claude answer cache", ex); }
         return out;
     }
 
@@ -183,7 +183,7 @@ public final class ClaudeService {
                 try { cache.put(l.substring(0, t), new String(Base64.getDecoder().decode(l.substring(t2 + 1)), StandardCharsets.UTF_8)); }
                 catch (IllegalArgumentException ignored) { }
             }
-        } catch (IOException ignored) { }
+        } catch (IOException ex) { com.linkeddesk.app.Logs.error("Reading Claude usage", ex); }
     }
 
     private void appendCache(String key, String text) throws IOException {

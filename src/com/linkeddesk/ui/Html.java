@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.ArrayList;
 
 /** Builds the HTML shown in the detail panes (Swing's HTML renderer supports basic HTML 3.2 + simple CSS). */
 final class Html {
@@ -71,10 +72,16 @@ final class Html {
                   java.util.function.BiFunction<StoryCluster, StoryCluster, com.linkeddesk.ai.LinkChecks.Check> checks,
                   java.util.function.Predicate<Article> hasFullText,
                   java.util.List<com.linkeddesk.store.ConnectionStore.Entry> suggestions, long connectionsChecked,
-                  java.util.function.Function<java.util.Set<String>, StoryCluster> storyOf) {
+                  java.util.function.Function<java.util.Set<String>, StoryCluster> storyOf, java.util.function.Function<Article, String> fullText) {
         Extras(boolean starred, com.linkeddesk.analysis.Regions.Spread spread, boolean newSinceRead,
                java.util.function.BiFunction<StoryCluster, StoryCluster, com.linkeddesk.ai.LinkChecks.Check> checks,
-               java.util.function.Predicate<Article> hasFullText) { this(starred, spread, newSinceRead, checks, hasFullText, null, 0, null); }
+               java.util.function.Predicate<Article> hasFullText, java.util.List<com.linkeddesk.store.ConnectionStore.Entry> suggestions, long connectionsChecked,
+               java.util.function.Function<java.util.Set<String>, StoryCluster> storyOf) {
+            this(starred, spread, newSinceRead, checks, hasFullText, suggestions, connectionsChecked, storyOf, null);
+        }
+        Extras(boolean starred, com.linkeddesk.analysis.Regions.Spread spread, boolean newSinceRead,
+               java.util.function.BiFunction<StoryCluster, StoryCluster, com.linkeddesk.ai.LinkChecks.Check> checks,
+               java.util.function.Predicate<Article> hasFullText) { this(starred, spread, newSinceRead, checks, hasFullText, null, 0, null, null); }
         Extras(boolean starred, com.linkeddesk.analysis.Regions.Spread spread, boolean newSinceRead) { this(starred, spread, newSinceRead, null, null); }
         Extras(boolean starred, com.linkeddesk.analysis.Regions.Spread spread, boolean newSinceRead,
                java.util.function.BiFunction<StoryCluster, StoryCluster, com.linkeddesk.ai.LinkChecks.Check> checks) { this(starred, spread, newSinceRead, checks, null); }
@@ -82,7 +89,122 @@ final class Html {
 
     static String story(StoryCluster c, boolean canExplain, SearchQuery q, boolean corrections) { return story(c, canExplain, q, corrections, null); }
 
+    private static final DateTimeFormatter DAYF = DateTimeFormatter.ofPattern("MMM d, yyyy").withZone(ZoneId.systemDefault());
+
+    /** A person, company or place (UI-F18): stories over time, desks, names it appears with, its stories newest first. */
+    static String entity(com.linkeddesk.analysis.EntityPage e, java.util.Set<String> inView) {
+        StringBuilder sb = new StringBuilder("<html><head><style>").append(css()).append("</style></head><body>");
+        sb.append("<h1>").append(esc(e.name())).append("</h1>");
+        if (e.stories().isEmpty()) return sb.append("<p class='meta'>Nothing saved mentions \"").append(esc(e.name())).append("\" yet.</p></body></html>").toString();
+        sb.append("<p class='meta'>").append(e.stories().size()).append(e.stories().size() == 1 ? " story, " : " stories, ").append(e.articles())
+          .append(e.articles() == 1 ? " article" : " articles").append(" from ").append(esc(DAYF.format(Instant.ofEpochMilli(e.first())))).append(" to ")
+          .append(esc(DAYF.format(Instant.ofEpochMilli(e.last())))).append(". <span class='act'><a href='watch:'>Watch it</a> · <a href='topic:'>Add as a topic…</a>")
+          .append(claudeOn ? " · <a href='explain:'>Explain it (Claude)</a>" : "").append("</span></p>");
+        // Articles per month as a small bar chart
+        sb.append("<h2>Over time</h2><table cellspacing='2'><tr valign='bottom'>");
+        int max = e.byMonth().values().stream().mapToInt(Integer::intValue).max().orElse(1);
+        for (var m : e.byMonth().entrySet()) {
+            int h = Math.max(3, (int) Math.round(60.0 * m.getValue() / max));
+            sb.append("<td align='center' class='meta'>").append(m.getValue()).append("<br><table cellspacing='0' cellpadding='0'><tr><td width='26' height='").append(h)
+              .append("' bgcolor='").append(Theme.link()).append("'></td></tr></table>").append(m.getKey().getMonth().getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.ENGLISH))
+              .append("<br>").append(m.getKey().getYear() % 100).append("</td>");
+        }
+        sb.append("</tr></table>");
+        sb.append("<p class='terms'>Desks: ");
+        int i = 0;
+        for (var d : e.byDesk().entrySet()) sb.append(i++ > 0 ? " · " : "").append("<span style='color:").append(Theme.deskHex(d.getKey())).append("'>")
+                .append(esc(d.getKey().label())).append("</span> ").append(d.getValue());
+        sb.append("</p>");
+        if (!e.withNames().isEmpty()) {
+            sb.append("<p class='terms'>Often with: ");
+            i = 0;
+            for (var n : e.withNames()) sb.append(i++ > 0 ? ", " : "").append("<a href='entity:").append(esc(java.net.URLEncoder.encode(n.getKey(), java.nio.charset.StandardCharsets.UTF_8)))
+                    .append("'>").append(esc(n.getKey())).append("</a> <span class='meta'>").append(n.getValue()).append("</span>");
+            sb.append("</p>");
+        }
+        sb.append("<h2>Stories, newest first</h2><table>");
+        int shown = 0;
+        for (StoryCluster c : e.stories()) {
+            if (shown++ >= 80) break;
+            Article lead = com.linkeddesk.alerts.EmailDigest.lead(c);
+            String href = inView != null && inView.contains(c.id) ? "story:" + c.id : lead.url;
+            sb.append("<tr><td width='8' bgcolor='").append(Theme.deskHex(c.category)).append("'></td><td><a href='").append(esc(href)).append("'>").append(esc(c.headline))
+              .append("</a><br><span class='meta'>").append(esc(DAYF.format(Instant.ofEpochMilli(c.lastSeen)))).append(" · ").append(esc(c.category.label())).append(" · ")
+              .append(c.sourceCount()).append(c.sourceCount() == 1 ? " source" : " sources").append("</span></td></tr>");
+        }
+        if (e.stories().size() > 80) sb.append("<tr><td></td><td class='meta'>…and ").append(e.stories().size() - 80).append(" older stories (use Search for all of them).</td></tr>");
+        return sb.append("</table></body></html>").toString();
+    }
+
+    /** Coming up (ANL-F16): upcoming events by date; {@code limit} 0 = all, with yours first. */
+    static String comingUp(List<com.linkeddesk.service.NewsService.Upcoming> items, int limit, boolean page,
+                           java.util.function.Function<Article, StoryCluster> storyOf) {
+        StringBuilder sb = new StringBuilder();
+        if (page) sb.append("<html><head><style>").append(css()).append("</style></head><body><h1>Coming up</h1>")
+                .append("<p class='meta'>Events the news says are coming (votes, launches, deadlines, meetings), read from dates in headlines and summaries of the last 30 days. ")
+                .append("Check the article before relying on a date.</p>");
+        else sb.append("<h2>Coming up</h2>");
+        if (items.isEmpty()) {
+            sb.append("<p class='meta'>No upcoming dates found in recent news.</p>");
+            return page ? sb.append("</body></html>").toString() : sb.toString();
+        }
+        java.util.function.BiConsumer<StringBuilder, com.linkeddesk.service.NewsService.Upcoming> row = (b, u) -> {
+            var e = u.event();
+            StoryCluster c = storyOf == null ? null : storyOf.apply(e.article());
+            String href = c != null ? "story:" + c.id : e.article().url;
+            b.append("<tr><td width='96' class='meta' valign='top'><b>").append(esc(e.when())).append("</b></td><td>").append(esc(e.text()))
+             .append("<br><span class='meta'><a href='").append(esc(href)).append("'>").append(esc(e.article().source)).append(": ").append(esc(e.article().title)).append("</a>")
+             .append(u.mine() != null ? " · <span class='star'>" + esc(u.mine()) + "</span>" : "").append("</span></td></tr>");
+        };
+        var mine = items.stream().filter(u -> u.mine() != null).toList();
+        if (page && !mine.isEmpty()) {
+            sb.append("<h2>For your topics and watches</h2><table>");
+            for (var u : mine) row.accept(sb, u);
+            sb.append("</table><h2>Everything coming up</h2>");
+        }
+        sb.append("<table>");
+        int n = 0;
+        java.util.List<com.linkeddesk.service.NewsService.Upcoming> order = new java.util.ArrayList<>(items);
+        if (!page) order.sort(java.util.Comparator.comparing((com.linkeddesk.service.NewsService.Upcoming u) -> u.event().date()).thenComparing(u -> u.mine() == null));
+        for (var u : order) { if (limit > 0 && n++ >= limit) break; row.accept(sb, u); }
+        sb.append("</table>");
+        if (!page && limit > 0 && items.size() > limit) sb.append("<p class='act'><a href='comingup:'>All ").append(items.size()).append(" upcoming events…</a></p>");
+        else if (!page) sb.append("<p class='act'><a href='comingup:'>Open Coming up…</a></p>");
+        return page ? sb.append("</body></html>").toString() : sb.toString();
+    }
+
+    /** Quick read (ANL-F15): the sentences the outlets agree on most, each credited. */
+    static String quickRead(StoryCluster c, java.util.function.Function<Article, String> fullText) {
+        var lines = com.linkeddesk.analysis.QuickRead.of(c, fullText == null ? a -> "" : fullText);
+        if (lines.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder("<table class='qr' width='100%' cellpadding='6'><tr><td bgcolor='").append(Theme.panelHex()).append("'>")
+                .append("<b>Quick read</b> <span class='meta'>· sentences from the coverage, picked by how many outlets report the same thing</span><ul>");
+        for (var l : lines)
+            sb.append("<li>").append(esc(l.text())).append(" <span class='meta'>— <a href='").append(esc(l.from().url)).append("'>").append(esc(l.from().source)).append("</a>")
+              .append(l.alsoReported() > 0 ? ", and " + l.alsoReported() + (l.alsoReported() == 1 ? " other outlet" : " other outlets") : "").append("</span></li>");
+        return sb.append("</ul></td></tr></table>").toString();
+    }
+
+    /** The case files a story is in (set by the main window; UI-F19). */
+    static volatile java.util.function.Function<StoryCluster, List<String>> caseNames;
+
+    /** Whether Claude features are available (an API key is saved); without one, Claude links aren't shown (UI-F15). */
+    static volatile boolean claudeOn = true;
+    private static final java.util.List<javax.swing.JComponent> CLAUDE_ONLY = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    /** Registers a button that only makes sense with Claude: hidden while there's no API key. */
+    static <T extends javax.swing.JComponent> T claudeOnly(T c) { CLAUDE_ONLY.add(c); c.setVisible(claudeOn); return c; }
+
+    /** Turns Claude links and buttons on or off (called at start and after Settings). */
+    static void setClaude(boolean on) {
+        claudeOn = on;
+        for (var c : CLAUDE_ONLY) c.setVisible(on);
+    }
+
+    static final String CLAUDE_OFF = "<p class='meta'>Claude features (explainers, framing, connections, combined articles) are off: add an Anthropic API key in Tools &gt; Settings &gt; Claude to turn them on.</p>";
+
     static String story(StoryCluster c, boolean canExplain, SearchQuery q, boolean corrections, Extras x) {
+        canExplain = canExplain && claudeOn;
         java.util.function.UnaryOperator<String> hl = t -> q == null ? esc(t) : q.highlight(esc(t));
         StringBuilder sb = new StringBuilder("<html><head><style>").append(css()).append("</style></head><body>");
         sb.append("<span class='tag' style='color:").append(Theme.deskHex(c.category)).append("'>")
@@ -96,10 +218,12 @@ final class Html {
         if (corrections) sb.append(" <span class='act'>· <a href='desk:'>Move to another desk…</a></span>");
         if (x != null) {
             sb.append(" <span class='act'>· ").append(x.starred() ? "<span class='star'>★ Starred</span> <a href='unstar:'>unstar</a>" : "<a href='star:'>☆ Star</a>")
-              .append(" · <a href='unread:'>Mark unread</a> · <a href='watch:'>Watch this subject…</a> · <a href='copy:'>Copy</a> · <a href='export:'>Export…</a>")
-              .append(c.sourceCount() >= 3 ? " · <a href='framing:'>How outlets framed it</a>" : "").append(" · <a href='explain:'>Explain this</a>")
-              .append(c.links.isEmpty() ? "" : " · <a href='combined:'>One article from the linked stories</a>").append("</span>");
+              .append(" · <a href='unread:'>Mark unread</a> · <a href='watch:'>Watch this subject…</a> · <a href='case:'>Add to case file…</a> · <a href='speak:'>Read aloud</a> · <a href='copy:'>Copy</a> · <a href='export:'>Export…</a>")
+              .append(canExplain && c.sourceCount() >= 3 ? " · <a href='framing:'>How outlets framed it</a>" : "").append(canExplain ? " · <a href='explain:'>Explain this</a>" : "")
+              .append(!canExplain || c.links.isEmpty() ? "" : " · <a href='combined:'>One article from the linked stories</a>").append("</span>");
             if (x.newSinceRead()) sb.append(" <span class='new'>new coverage since you read it</span>");
+            var inCases = caseNames == null ? List.<String>of() : caseNames.apply(c);
+            if (!inCases.isEmpty()) sb.append(" <span class='meta'>· in case file").append(inCases.size() == 1 ? " " : "s ").append(esc(String.join(", ", inCases))).append("</span>");
         }
         // The headline opens the article, and a plain "Read it at …" link sits right under it.
         Article lead = com.linkeddesk.alerts.EmailDigest.lead(c);
@@ -116,9 +240,18 @@ final class Html {
         }
         if (summary.isEmpty())
             sb.append("<p class='meta'>").append(esc(lead.source)).append("'s feed gives only the headline, not a summary. Open the article to read it.</p>");
+        sb.append(quickRead(c, x == null ? null : x.hasFullText() == null ? null : x.fullText()));
         if (x != null && x.spread() != null) sb.append(spread(c, x.spread()));
         if (!c.keyTerms.isEmpty()) {
-            sb.append("<p class='terms'>Key terms: ").append(esc(String.join(", ", c.keyTerms.subList(0, Math.min(8, c.keyTerms.size()))))).append("</p>");
+            sb.append("<p class='terms'>Key terms: ");
+            List<String> kt = c.keyTerms.subList(0, Math.min(8, c.keyTerms.size()));
+            for (int i = 0; i < kt.size(); i++) {
+                String t = kt.get(i);
+                if (i > 0) sb.append(", ");
+                boolean name = !t.isEmpty() && Character.isUpperCase(t.charAt(0));
+                sb.append(name ? "<a href='entity:" + esc(java.net.URLEncoder.encode(t, java.nio.charset.StandardCharsets.UTF_8)) + "'>" + esc(t) + "</a>" : esc(t));
+            }
+            sb.append(" <span class='meta'>(click a name for everything saved about it)</span></p>");
         }
 
         List<StoryCluster> line = c.storyline();
@@ -168,13 +301,22 @@ final class Html {
             sb.append("</table>");
         }
         sb.append(connectionsSection(c, x, canExplain));
+        if (!claudeOn && x != null) sb.append(CLAUDE_OFF);
         if (c.hiddenLinks > 0) {
             sb.append("<p class='act'>").append(c.hiddenLinks).append(c.hiddenLinks == 1 ? " link you marked wrong is" : " links you marked wrong are")
               .append(" hidden. Tools &gt; Your corrections lists them.</p>");
         }
 
-        sb.append("<h2>Coverage</h2><table>");
-        for (Article a : c.articlesNewestFirst()) {
+        var groups = coverageGroups(c);
+        boolean all = expandedCoverage.contains(c.id) || groups.size() <= COVERAGE_SHOWN + 1;
+        sb.append("<h2>Coverage (").append(c.articles.size()).append(c.articles.size() == 1 ? " article" : " articles").append(")</h2>");
+        if (groups.size() < c.articles.size())
+            sb.append("<p class='meta'>Outlets with near-identical headlines are folded together; separate reports first, then copies, then opinion.</p>");
+        sb.append("<table>");
+        int shown = 0;
+        for (List<Article> g : groups) {
+            if (!all && shown++ >= COVERAGE_SHOWN) break;
+            Article a = g.get(0);
             sb.append("<tr><td><a href='").append(esc(a.url)).append("'>").append(hl.apply(a.title)).append("</a><br>")
               .append("<span class='meta'>").append(esc(a.source)).append(a.kindLabel().isEmpty() ? "" : " · " + a.kindLabel())
               .append(com.linkeddesk.analysis.Coverage.opinion(a) ? " · <b>Opinion / analysis</b>" : "")
@@ -191,10 +333,56 @@ final class Html {
                 String s = a.summary.length() > 280 ? a.summary.substring(0, 280) + "…" : a.summary;
                 sb.append("<br><span class='terms'>").append(hl.apply(s)).append("</span>");
             }
+            if (g.size() > 1) {
+                sb.append("<br><span class='meta'>Same headline also at: ");
+                for (int i = 1; i < g.size(); i++) sb.append(i > 1 ? ", " : "").append("<a href='").append(esc(g.get(i).url)).append("'>").append(esc(g.get(i).source)).append("</a>");
+                sb.append("</span>");
+            }
             sb.append("</td></tr>");
         }
-        sb.append("</table></body></html>");
+        sb.append("</table>");
+        if (!all) {
+            int rest = 0;
+            for (int i = COVERAGE_SHOWN; i < groups.size(); i++) rest += groups.get(i).size();
+            sb.append("<p class='act'><a href='morecov:'>").append(rest).append(rest == 1 ? " more article…" : " more articles…").append("</a></p>");
+        } else if (groups.size() > COVERAGE_SHOWN + 1) sb.append("<p class='act'><a href='lesscov:'>Show fewer</a></p>");
+        sb.append("</body></html>");
         return sb.toString();
+    }
+
+    static final int COVERAGE_SHOWN = 5;
+    /** Stories whose full coverage list you opened (UI-F17). */
+    static final java.util.Set<String> expandedCoverage = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    /**
+     * The coverage list in order (UI-F17): separate reports first, then copies of a wire report, then opinion; outlets
+     * with near-identical headlines folded into one entry (the first is shown, the rest listed under it).
+     */
+    static List<List<Article>> coverageGroups(StoryCluster c) {
+        List<Article> arts = c.articlesNewestFirst();
+        java.util.Map<Article, Integer> rank = new java.util.HashMap<>();
+        java.util.Set<Article> copies = new java.util.HashSet<>();
+        if (c.copies != null) for (var cp : c.copies) for (int i = 1; i < cp.articles().size(); i++) copies.add(cp.articles().get(i));
+        for (Article a : arts) rank.put(a, com.linkeddesk.analysis.Coverage.opinion(a) ? 2 : copies.contains(a) ? 1 : 0);
+        List<Article> order = new ArrayList<>(arts);
+        order.sort(java.util.Comparator.comparingInt(rank::get));
+        List<List<Article>> groups = new ArrayList<>();
+        List<java.util.Set<String>> keys = new ArrayList<>();
+        for (Article a : order) {
+            java.util.Set<String> w = com.linkeddesk.analysis.QuickRead.words(a.title);
+            int hit = -1;
+            for (int i = 0; i < groups.size() && hit < 0; i++) {
+                if (!rank.get(groups.get(i).get(0)).equals(rank.get(a))) continue;
+                java.util.Set<String> o = keys.get(i);
+                int in = 0;
+                for (String x : w) if (o.contains(x)) in++;
+                int un = w.size() + o.size() - in;
+                if (un > 0 && w.size() >= 3 && (double) in / un >= 0.7) hit = i;
+            }
+            if (hit >= 0) groups.get(hit).add(a);
+            else { List<Article> g = new ArrayList<>(); g.add(a); groups.add(g); keys.add(w); }
+        }
+        return groups;
     }
 
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("EEEE, MMMM d").withZone(ZoneId.systemDefault());
@@ -236,7 +424,11 @@ final class Html {
                   .append(" · ").append(rk.last24h()).append(" new in 24 h").append(rk.last6h() > 0 ? " (" + rk.last6h() + " in the last 6 h)" : "")
                   .append(" · ").append(sp.singleSource() ? "<span class='warn'>single source</span>" : esc(sp.label()))
                   .append(c.links.isEmpty() ? "" : " · ↔ " + c.links.size()).append("</span>");
-                if (!c.summary.isEmpty()) {
+                var qr = com.linkeddesk.analysis.QuickRead.of(c);
+                if (!qr.isEmpty()) {
+                    for (int q = 0; q < Math.min(2, qr.size()); q++)
+                        sb.append("<br><span class='terms'>").append(esc(qr.get(q).text())).append(" <span class='meta'>(").append(esc(qr.get(q).from().source)).append(")</span></span>");
+                } else if (!c.summary.isEmpty()) {
                     String sum = c.summary.length() > 200 ? c.summary.substring(0, 200) + "…" : c.summary;
                     sb.append("<br><span class='terms'>").append(esc(sum)).append("</span>");
                 }
@@ -282,6 +474,7 @@ final class Html {
     /** Claude's daily digest for the top of the briefing. */
     static String digest(com.linkeddesk.ai.Digest d, java.util.function.Function<String, StoryCluster> story, boolean canWrite, String budget) {
         StringBuilder sb = new StringBuilder();
+        if ((d == null || d.isEmpty()) && !canWrite) return "";        // no key: no Claude prompt (UI-F15)
         if (d == null || d.isEmpty()) {
             sb.append("<h2>How today connects</h2><p class='meta'>");
             if (canWrite) sb.append("Claude hasn't written today's digest yet. <a href='digest:'>Write it now</a> · ")
@@ -400,7 +593,7 @@ final class Html {
         if (pts > 0) sb.append("<br>Source check: ").append(pts - r.weak().size()).append(" of ").append(pts)
                 .append(" points share key words with the articles they cite").append(r.weak().isEmpty() ? "." : "; " + r.weak().size() + " marked ⚠ to check.");
         sb.append("</p>");
-        sb.append("<p class='act'><a href='simpler:'>Explain it more simply</a> · <a href='update:'>Update with the latest news</a>")
+        sb.append("<p class='act'><a href='speak:'>Read aloud</a> · <a href='simpler:'>Explain it more simply</a> · <a href='update:'>Update with the latest news</a>")
           .append(" · <a href='detailed:'>").append(r.level() == com.linkeddesk.ai.Explainer.Level.QUICK ? "Detailed version" : "Quick version").append("</a>")
           .append(" · <a href='copy:'>Copy</a> · <a href='export:'>Export…</a> · <a href='delete:'>Delete</a></p>");
         java.util.function.Function<String, String> cite = line -> {
@@ -482,7 +675,7 @@ final class Html {
         if (pts > 0) sb.append("<br>Every paragraph links to its sources. Source check: ").append(pts - r.weak().size()).append(" of ").append(pts)
                 .append(" passages share key words with the articles they cite").append(r.weak().isEmpty() ? "." : "; " + r.weak().size() + " marked ⚠ to check.");
         sb.append(" Sentences marked <i>(Claude's reading)</i> are its interpretation.").append(budget == null || budget.isBlank() ? "" : " " + esc(budget)).append("</p>");
-        sb.append("<p class='act'><a href='simpler:'>Explain it more simply</a> · <a href='update:'>Update with the latest news</a>")
+        sb.append("<p class='act'><a href='speak:'>Read aloud</a> · <a href='simpler:'>Explain it more simply</a> · <a href='update:'>Update with the latest news</a>")
           .append(" · <a href='copy:'>Copy</a> · <a href='export:'>Export…</a> · <a href='delete:'>Delete</a></p><hr>");
         var paras = r.sections().get("ARTICLE");
         if (paras.isEmpty() && sum.isEmpty()) sb.append("<p>Claude's answer had nothing that could be traced to the articles.</p>");
@@ -594,7 +787,7 @@ final class Html {
         sb.append("<h1>").append(esc(line.latest().headline)).append("</h1><p class='meta'>One event followed across ")
           .append(line.days()).append(line.days() == 1 ? " day" : " days").append(": ").append(line.stories().size())
           .append(" stories, ").append(line.articleCount()).append(" articles, oldest first. Click a story to open it.")
-          .append(" · <a href='explain:'>Explain this storyline (Claude)</a></p><table>");
+          .append(claudeOn ? " · <a href='explain:'>Explain this storyline (Claude)</a>" : "").append("</p><table>");
         for (StoryCluster c : line.stories()) {
             sb.append("<tr><td width='8' bgcolor='").append(Theme.deskHex(c.category)).append("'></td><td>")
               .append("<span class='meta'>").append(WHEN.format(Instant.ofEpochMilli(c.firstSeen))).append(" · ")
@@ -614,7 +807,7 @@ final class Html {
         sb.append("<h1>Thread: ").append(esc(t.topic())).append("</h1><p class='meta'>")
           .append(t.stories().size()).append(" linked stories across ").append(t.desks().size())
           .append(t.desks().size() == 1 ? " desk" : " desks").append(", oldest first. Click a story to open it.")
-          .append(" · <a href='explain:'>Explain this thread (Claude)</a> · <a href='combined:'>Write it as one article (Claude)</a></p><table>");
+          .append(claudeOn ? " · <a href='explain:'>Explain this thread (Claude)</a> · <a href='combined:'>Write it as one article (Claude)</a>" : "").append("</p><table>");
         List<StoryCluster> stories = t.stories();
         for (StoryCluster c : stories) {
             sb.append("<tr><td width='8' bgcolor='").append(Theme.deskHex(c.category)).append("'></td><td>")

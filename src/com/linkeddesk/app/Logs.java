@@ -93,6 +93,23 @@ public final class Logs {
         return runs;
     }
 
+    /** Errors logged since {@code since} (OPS-F09), with the first line of each, newest last. */
+    public static List<String> errorsSince(LocalDateTime since) {
+        List<String> out = new java.util.ArrayList<>();
+        Path f = dir().resolve("errors.log");
+        if (!Files.exists(f)) return out;
+        try {
+            for (String l : Files.readAllLines(f, StandardCharsets.UTF_8)) {
+                if (l.length() < 21 || !Character.isDigit(l.charAt(0)) || l.charAt(4) != '-') continue;
+                try {
+                    LocalDateTime t = LocalDateTime.parse(l.substring(0, 19), STAMP);
+                    if (!t.isBefore(since)) out.add(l.substring(19).strip());
+                } catch (java.time.format.DateTimeParseException ignored) { /* a stack-trace line, not an entry */ }
+            }
+        } catch (IOException e) { out.add("errors.log couldn't be read: " + e.getMessage()); }
+        return out;
+    }
+
     public static String errorLogText() {
         try {
             Path f = dir().resolve("errors.log");

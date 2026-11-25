@@ -39,6 +39,12 @@ public final class PhonePage {
     /** With the explainers made recently (AI-F08): each one's bottom line, with the rest folded away. */
     public static String build(Briefing b, Digest d, Regions regions, Map<String, List<StoryCluster>> watchNew, List<LocalDate> earlier, boolean inDaysFolder,
                                List<com.linkeddesk.ai.Explainer.Result> explainers) {
+        return build(b, d, regions, watchNew, earlier, inDaysFolder, explainers, List.of());
+    }
+
+    /** With the next 7 days of upcoming events (ANL-F16). */
+    public static String build(Briefing b, Digest d, Regions regions, Map<String, List<StoryCluster>> watchNew, List<LocalDate> earlier, boolean inDaysFolder,
+                               List<com.linkeddesk.ai.Explainer.Result> explainers, List<com.linkeddesk.analysis.ComingUp.Event> upcoming) {
         StringBuilder h = new StringBuilder("<!DOCTYPE html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">\n"
                 + "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<meta name=\"color-scheme\" content=\"light dark\">\n"
                 + "<title>Briefing · " + esc(DATE.format(Instant.ofEpochMilli(b.now()))) + "</title>\n<style>\n" + CSS + "</style></head><body>\n");
@@ -48,6 +54,7 @@ public final class PhonePage {
         if (!watchNew.isEmpty()) h.append("<a href=\"#watch\">Watchlist</a>");
         if (d != null && !d.isEmpty()) h.append("<a href=\"#today\">Today</a>");
         if (!explainers.isEmpty()) h.append("<a href=\"#explainers\">Explainers</a>");
+        if (!upcoming.isEmpty()) h.append("<a href=\"#coming\">Coming up</a>");
         if (!b.newLinks().isEmpty()) h.append("<a href=\"#links\">Links</a>");
         for (var e : b.desks().entrySet()) if (!e.getValue().isEmpty()) h.append("<a href=\"#").append(e.getKey().name().toLowerCase(Locale.ROOT)).append("\">").append(esc(short_(e.getKey()))).append("</a>");
         h.append("</nav>\n<main>\n");
@@ -66,6 +73,12 @@ public final class PhonePage {
             digest(h, "Claude's reading (inference, not reported fact)", d.inference(), d, b, true);
             digest(h, "What to watch", d.watch(), d, b, false);
             h.append("</section>\n");
+        }
+        if (!upcoming.isEmpty()) {
+            h.append("<section id=\"coming\"><h2>Coming up</h2><ul class=\"dg\">");
+            for (var e : upcoming) h.append("<li><b>").append(esc(e.when())).append("</b> ").append(esc(e.text()))
+                    .append(" <a class=\"cite\" href=\"").append(esc(e.article().url)).append("\">").append(esc(e.article().source)).append("</a></li>");
+            h.append("</ul></section>\n");
         }
         if (!explainers.isEmpty()) {
             h.append("<section id=\"explainers\"><h2>Explainers</h2><p class=\"note\">Written by Claude from the articles cited.</p>");

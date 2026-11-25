@@ -55,8 +55,8 @@ public final class Sources {
         rules.clear();
         cache.clear();
         try {
-            if (Files.exists(file)) {
-                for (String raw : Files.readAllLines(file, StandardCharsets.UTF_8)) {
+            {
+                for (String raw : com.linkeddesk.app.SafeFiles.readLines(file)) {
                     String line = raw.strip();
                     if (line.isEmpty() || line.startsWith("#")) continue;
                     int eq = line.lastIndexOf('=');
@@ -68,7 +68,8 @@ public final class Sources {
                     catch (NumberFormatException ignored) { }
                 }
             }
-        } catch (IOException ignored) { }
+            unreadable = false;
+        } catch (IOException e) { unreadable = true; stamp = Long.MIN_VALUE; }
         rules.sort(Comparator.comparingInt((Rule r) -> r.name().length()).reversed());
         patterns.clear();
         for (Rule r : rules) patterns.add(Pattern.compile("(?<![\\p{L}\\p{N}])" + Pattern.quote(r.name().toLowerCase(Locale.ROOT)) + "(?![\\p{L}\\p{N}])"));
@@ -120,16 +121,17 @@ public final class Sources {
     }
 
     /** Sets or clears your rule for one outlet: mute, a weight, or (weight 1, not muted) no rule. */
+    private boolean unreadable;
+
     public synchronized void set(String outlet, boolean mute, double weight) throws IOException {
+        com.linkeddesk.app.SafeFiles.checkSafeToSave(unreadable, file);
         Map<String, Rule> byName = new LinkedHashMap<>();
         for (Rule r : rules) byName.put(r.name(), r);
         if (!mute && Math.abs(weight - 1) < 1e-9) byName.remove(outlet);
         else byName.put(outlet, new Rule(outlet, mute, mute ? 1 : weight));
         StringBuilder sb = new StringBuilder(HEADER);
         for (Rule r : byName.values()) sb.append(r.name().replace("=", "-")).append(" = ").append(r.mute() ? "mute" : fmt(r.weight())).append('\n');
-        Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
-        Files.writeString(tmp, sb.toString(), StandardCharsets.UTF_8);
-        Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        com.linkeddesk.app.SafeFiles.write(file, sb.toString());
         stamp = Long.MIN_VALUE;
         load();
     }

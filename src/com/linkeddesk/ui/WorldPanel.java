@@ -90,7 +90,7 @@ final class WorldPanel extends JPanel {
                     map.setData(index);
                     if (selected != null && index.containsKey(selected)) pick(selected);
                     else if (!rows.isEmpty()) pick(rows.get(0).getKey());
-                } catch (Exception ex) { info.setText("Could not place the stories: " + ex.getMessage()); }
+                } catch (Exception ex) { com.linkeddesk.app.Logs.error("Placing stories on the World map", ex); info.setText("Could not place the stories: " + ex.getMessage()); }
             }
         }.execute();
     }

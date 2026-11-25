@@ -47,7 +47,7 @@ final class SearchPanel extends JPanel {
         top.add(searchBtn);
         top.add(liveBtn);
         top.add(saveBtn);
-        JButton explainBtn = new JButton("Explain these results");
+        JButton explainBtn = Html.claudeOnly(new JButton("Explain these results"));
         explainBtn.setToolTipText("Claude reads the best of these articles and explains the subject");
         explainBtn.addActionListener(e -> {
             String q = text();
@@ -145,7 +145,7 @@ final class SearchPanel extends JPanel {
         new SwingWorker<NewsService.SearchResult, Void>() {
             @Override protected NewsService.SearchResult doInBackground() throws Exception { return host.service().search(sq, f); }
             @Override protected void done() {
-                try { NewsService.SearchResult r = get(); if (r.total() > 0) show(sq, r, false); } catch (Exception ignored) { }
+                try { NewsService.SearchResult r = get(); if (r.total() > 0) show(sq, r, false); } catch (Exception ex) { com.linkeddesk.app.Logs.error("Searching", ex); }
             }
         }.execute();
     }

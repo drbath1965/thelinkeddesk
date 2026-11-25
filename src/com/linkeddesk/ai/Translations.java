@@ -35,7 +35,7 @@ public final class Translations {
                 String[] p = l.split("\t", -1);
                 if (p.length >= 4) map.put(p[0], new Entry(p[1], unesc(p[2]), unesc(p[3])));   // an empty headline: tried, nothing to use
             }
-        } catch (IOException ignored) { }
+        } catch (IOException ex) { com.linkeddesk.app.Logs.error("Reading translations", ex); }
         return this;
     }
 

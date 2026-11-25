@@ -93,7 +93,7 @@ public final class Explainer {
 
     /**
      * Picks up to {@code max} articles: the best report from each story first (the most covered stories first), then
-     * more outlets per story, never two copies of one wire report; opinion only if there's room (at most 3).
+     * one more outlet per story, round by round, never two copies of one wire report; opinion only if there's room (at most 3).
      * Returned oldest first, numbered S1…
      */
     public static Map<String, Article> select(List<StoryCluster> stories, int max, Function<Article, String> fullText) {
@@ -103,7 +103,9 @@ public final class Explainer {
         Set<String> groups = new HashSet<>();
         Map<StoryCluster, Set<String>> outletsUsed = new HashMap<>();
         Function<Article, Integer> size = a -> a.title.length() + a.summary.length() + Math.min(1500, fullText.apply(a).length());
-        for (int round = 0; round < 4 && chosen.size() < max; round++) {
+        // Round by round, one more outlet per story, until the limit or nothing new is left (AI-F11: not just 4 rounds).
+        for (boolean added = true; added && chosen.size() < max; ) {
+            added = false;
             for (StoryCluster c : order) {
                 if (chosen.size() >= max) break;
                 Map<Article, String> groupOf = new HashMap<>();
@@ -117,6 +119,7 @@ public final class Explainer {
                     if (best == null || size.apply(a) > size.apply(best)) best = a;
                 }
                 if (best == null) continue;
+                added = true;
                 chosen.add(best);
                 used.add(best.source);
                 String g = groupOf.get(best);

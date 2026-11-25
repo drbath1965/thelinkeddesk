@@ -19,6 +19,7 @@ final class StoryBrowser extends JSplitPane {
     private final DefaultListModel<StoryCluster> model = new DefaultListModel<>();
     private final JList<StoryCluster> list = new JList<>(model);
     private final StoryPane pane;
+    StoryPane pane() { return pane; }
     private final Map<String, StoryCluster> byId = new HashMap<>();
     private final Host host;
     private boolean userPick;

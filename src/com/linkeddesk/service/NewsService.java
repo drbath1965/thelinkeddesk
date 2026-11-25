@@ -799,7 +799,7 @@ public final class NewsService {
         List<String> names = new ArrayList<>();
         if (target.keyTerms != null) for (String t : target.keyTerms) if (!t.isEmpty() && Character.isUpperCase(t.charAt(0)) && names.size() < 4) names.add(t);
         if (!names.isEmpty()) {
-            try { pool.addAll(findForQuestion(String.join(" ", names), new int[1], 25)); } catch (Exception ignored) { }
+            try { pool.addAll(findForQuestion(String.join(" ", names), new int[1], 25)); } catch (Exception ex) { Logs.error("Finding older stories for connections", ex); }
         }
         var store = connections();
         var cands = com.linkeddesk.ai.Connections.candidates(target, pool, com.linkeddesk.ai.Connections.MAX_CANDIDATES,
@@ -954,6 +954,53 @@ public final class NewsService {
         var c = claude();
         return new ExplainPlan(subject, level, refs, prompt, c.estimate(prompt, level.maxTokens), c.isCached("explainer", prompt, level.maxTokens),
                 c.spentThisMonth(), c.budget(), previous);
+    }
+
+    private com.linkeddesk.store.CaseFiles caseFiles;
+
+    /** Case files (UI-F19). */
+    public synchronized com.linkeddesk.store.CaseFiles caseFiles() {
+        if (caseFiles == null) caseFiles = new com.linkeddesk.store.CaseFiles(AppPaths.home().resolve("casefiles.txt"));
+        return caseFiles.load();
+    }
+
+    /** The saved articles of a case-file story, oldest first (empty if they're no longer on this PC). */
+    public List<Article> caseArticles(com.linkeddesk.store.CaseFiles.Item it) {
+        try { if (it.published() > 0) store.ensureLoaded(it.published() - 86_400_000L); } catch (IOException e) { Logs.error("Loading articles for a case file", e); }
+        List<Article> out = new ArrayList<>();
+        for (String id : it.ids()) { Article a = store.get(id); if (a != null) out.add(a); }
+        out.sort(java.util.Comparator.comparingLong(a -> a.published));
+        return out;
+    }
+
+    /** A page for one person, company or place (UI-F18): its stories across the whole archive. */
+    public com.linkeddesk.analysis.EntityPage entity(String name) throws IOException {
+        String n = name == null ? "" : name.replace("\"", "").strip();
+        if (n.isEmpty()) throw new IllegalArgumentException("Type a name.");
+        SearchResult r = search(new SearchQuery(n.contains(" ") ? "\"" + n + "\"" : n), SearchFilter.ANY);
+        return com.linkeddesk.analysis.EntityPage.of(n, r.stories().stories(), java.time.ZoneId.systemDefault());
+    }
+
+    /** An upcoming event, and whether it's about one of your topics or watches (ANL-F16). */
+    public record Upcoming(com.linkeddesk.analysis.ComingUp.Event event, String mine) {}
+
+    /** Upcoming events mentioned in the last 30 days of news, up to {@code days} ahead, soonest first. */
+    public List<Upcoming> comingUp(int days) {
+        long now = System.currentTimeMillis();
+        List<Article> recent = sources().visible(store.since(now - 30 * 86_400_000L));
+        java.time.ZoneId z = java.time.ZoneId.systemDefault();
+        var events = com.linkeddesk.analysis.ComingUp.find(recent, java.time.LocalDate.now(z), days, z);
+        List<String> mine = interests();
+        List<Upcoming> out = new ArrayList<>();
+        for (var e : events) {
+            String low = (e.text() + " " + e.article().title).toLowerCase(java.util.Locale.ROOT), hit = null;
+            for (String m : mine) {
+                String k = m.toLowerCase(java.util.Locale.ROOT).replace("\"", "").strip();
+                if (k.length() >= 3 && low.contains(k)) { hit = m; break; }
+            }
+            out.add(new Upcoming(e, hit));
+        }
+        return out;
     }
 
     /** Your topics and watches (names and search words), so an explainer can say how a subject bears on them. */
@@ -1170,7 +1217,8 @@ public final class NewsService {
             if (!l.isEmpty()) watchNew.put(w.name(), l);
         }
         java.nio.file.Path out = com.linkeddesk.export.PhonePage.write(java.nio.file.Path.of(settings.phoneFolder()), java.time.LocalDate.now(),
-                (earlier, inDays) -> com.linkeddesk.export.PhonePage.build(b, d, reg, watchNew, earlier, inDays, recentExplainers()));
+                (earlier, inDays) -> com.linkeddesk.export.PhonePage.build(b, d, reg, watchNew, earlier, inDays, recentExplainers(),
+                        comingUp(7).stream().map(Upcoming::event).toList()));
         Logs.run("phone", "briefing page written: " + out, "", 0);
         return out;
     }

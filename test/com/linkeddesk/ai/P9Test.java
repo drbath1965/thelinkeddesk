@@ -232,14 +232,32 @@ TERMS:
             Set<String> rdays = new HashSet<>();
             for (Article x : russia.refs().values()) rdays.add(java.time.LocalDate.ofInstant(java.time.Instant.ofEpochMilli(x.published), java.time.ZoneId.systemDefault()).toString());
             c.that(russia.articles() >= 20 && rdays.size() >= 3, "on the real-news sample, a broad subject gathers " + russia.articles() + " articles over " + rdays.size() + " days");
-            var gr = Explainer.parse("Russia", Explainer.Level.DETAILED, now, GROUNDED, Explainer.sources(russia.refs()), 0, List.of());
+            // GROUNDED was written against these articles; renumber its citations for the current selection.
+            String[][] wrote = {{"The Guardian", "Ukraine war briefing: Beijing"}, {"Reuters", "Russian cargo ship hit by drones in Baltic, Finland"},
+                    {"USA TODAY", "Cargo ship bound for Russia"}, {"CNN", "Russian ship hit by drones in Baltic still smoulders"},
+                    {"CNBC", "Russian ship hit by drones in Baltic still smolders"}, {"Barron's", "Russian Cargo Ship Hit By Ukrainian Drone Towed"},
+                    {"The Yeshiva World", "BALTIC FIRE"}, {"Reuters", "US intelligence chief says Putin"}, {"Yahoo", "Drones hit Kaliningrad-bound"},
+                    {"Independent Journal Review", "Drone Strike Disables"}, {"The Guardian", "Ukraine war briefing: Russian cargo ship"},
+                    {"NPR", "Ukraine war spilling"}, {"Politico Europe", "Ukraine sank Russian warship"}, {"Al Jazeera", "Poland says Russia"},
+                    {"Euronews", "Ukraine responsible for drone strikes"}, {"hromadske", "US intelligence chief"}, {"Chicago Tribune", "Ukrainian drones hit Russian warship"},
+                    {"Al Jazeera", "Child rescued"}, {"The Guardian", "Ukraine confirms"}, {"Daily Tribune", "Cargo ship hit by drone towed"}};
+            Map<String, String> renumber = new HashMap<>();
+            for (int i = 0; i < wrote.length; i++)
+                for (var e : russia.refs().entrySet())
+                    if (e.getValue().source.equals(wrote[i][0]) && e.getValue().title.startsWith(wrote[i][1])) renumber.put("S" + (i + 1), e.getKey());
+            c.eq(20, renumber.size(), "the 20 articles the test explainer was written from are all still chosen");
+            java.util.regex.Matcher rm = Explainer.TAG.matcher(GROUNDED);
+            StringBuilder gsb = new StringBuilder();
+            while (rm.find()) rm.appendReplacement(gsb, "[" + renumber.getOrDefault("S" + rm.group(1), "S999") + "]");
+            String grounded = rm.appendTail(gsb).toString();
+            var gr = Explainer.parse("Russia", Explainer.Level.DETAILED, now, grounded, Explainer.sources(russia.refs()), 0, List.of());
             java.util.function.Function<String, String> textOf = id -> { Article x = russia.refs().get(id); return x == null ? "" : x.title + " " + x.summary; };
             var weak = Explainer.weakPoints(gr, textOf);
             c.eq(Set.of("WATCH:1"), weak, "source check: of " + gr.citedPoints() + " points written from these articles, only the one citing the wrong article is marked");
             c.that(gr.readingMinutes() <= 3, "a full explainer reads in under 3 minutes (" + gr.words() + " words, about " + gr.readingMinutes() + " min)");
             int flagged = 0, total = 0;
             for (String wrong : List.of("S14", "S1")) {
-                var sw = Explainer.parse("Russia", Explainer.Level.DETAILED, now, GROUNDED.replaceAll("\\[S\\d+\\](\\[S\\d+\\])?", "[" + wrong + "]"), Explainer.sources(russia.refs()), 0, List.of());
+                var sw = Explainer.parse("Russia", Explainer.Level.DETAILED, now, GROUNDED.replaceAll("\\[S\\d+\\](\\[S\\d+\\])?", "[" + renumber.get(wrong) + "]"), Explainer.sources(russia.refs()), 0, List.of());
                 flagged += Explainer.weakPoints(sw, textOf).size(); total += sw.citedPoints();
             }
             c.that(flagged * 100 >= total * 80, "pointing every citation at an unrelated article gets " + flagged + " of " + total + " points marked");

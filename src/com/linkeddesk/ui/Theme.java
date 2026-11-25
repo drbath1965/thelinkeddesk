@@ -94,6 +94,7 @@ public final class Theme {
     static String ok() { return dark ? "#66bb6a" : "#2e7d32"; }
     static String bad() { return dark ? "#ef7070" : "#c62828"; }
     static String note() { return dark ? "#b8b5af" : "#555555"; }
+    static String panelHex() { return dark ? "#24282d" : "#f3f5f8"; }
     static Color lineColor() { return dark ? c("#3a3e43") : new Color(0xDDDDDD); }
     static Color panel() { return dark ? c("#2b2f33") : UIManager.getColor("Panel.background"); }
     static Color canvas() { return c(bg()); }

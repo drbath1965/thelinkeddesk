@@ -78,9 +78,9 @@ public final class Watches {
         problems.clear();
         compiled.clear();
         try {
-            if (Files.exists(file)) {
+            {
                 int n = 0;
-                for (String raw : Files.readAllLines(file, StandardCharsets.UTF_8)) {
+                for (String raw : com.linkeddesk.app.SafeFiles.readLines(file)) {
                     n++;
                     String line = raw.strip();
                     if (line.isEmpty() || line.startsWith("#")) continue;
@@ -91,13 +91,14 @@ public final class Watches {
                 }
             }
             seen.clear();
-            if (Files.exists(seenFile)) {
-                for (String l : Files.readAllLines(seenFile, StandardCharsets.UTF_8)) {
+            {
+                for (String l : com.linkeddesk.app.SafeFiles.readLines(seenFile)) {
                     String[] p = l.split("\t");
                     if (p.length == 2) try { seen.put(p[0], Long.parseLong(p[1])); } catch (NumberFormatException ignored) { }
                 }
             }
-        } catch (IOException ignored) { }
+            unreadable = false;
+        } catch (IOException e) { unreadable = true; stamp = Long.MIN_VALUE; }
         return this;
     }
 
@@ -105,12 +106,13 @@ public final class Watches {
     public synchronized List<String> problems() { return List.copyOf(problems); }
     public synchronized boolean isEmpty() { return watches.isEmpty(); }
 
+    private boolean unreadable;
+
     public synchronized void save(List<Watch> list) throws IOException {
+        com.linkeddesk.app.SafeFiles.checkSafeToSave(unreadable, file);
         StringBuilder sb = new StringBuilder(HEADER);
         for (Watch w : list) sb.append(w.name().replace("|", "/")).append(" | ").append(w.words().replace("|", " ")).append(" | ").append(w.alert() ? "yes" : "no").append('\n');
-        Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
-        Files.writeString(tmp, sb.toString(), StandardCharsets.UTF_8);
-        Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        com.linkeddesk.app.SafeFiles.write(file, sb.toString());
         stamp = Long.MIN_VALUE;
         load(lexicon);
     }
@@ -119,10 +121,11 @@ public final class Watches {
     public synchronized long lastSeen(String name) { return seen.getOrDefault(name, 0L); }
 
     public synchronized void markSeen(String name, long time) throws IOException {
+        com.linkeddesk.app.SafeFiles.checkSafeToSave(unreadable, seenFile);
         seen.put(name, time);
         StringBuilder sb = new StringBuilder();
         for (var e : seen.entrySet()) sb.append(e.getKey().replace('\t', ' ')).append('\t').append(e.getValue()).append('\n');
-        Files.writeString(seenFile, sb.toString(), StandardCharsets.UTF_8);
+        com.linkeddesk.app.SafeFiles.write(seenFile, sb.toString());
         stamp = stampNow();
     }
 

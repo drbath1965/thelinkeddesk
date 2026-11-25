@@ -54,6 +54,18 @@ final class StoryPane extends JScrollPane {
 
     void refresh() { if (current != null) show(current, false, false); }
 
+    /** The story page as plain text, for reading aloud: headline, summary and quick read (not the link lists). */
+    String plainText() {
+        try {
+            String t = detail.getDocument().getText(0, detail.getDocument().getLength());
+            int cut = t.indexOf("Linked stories (");
+            if (cut < 0) cut = t.indexOf("Coverage (");
+            t = cut > 0 ? t.substring(0, cut) : t;
+            int start = current == null ? -1 : t.indexOf(current.headline);
+            return start > 0 ? t.substring(start) : t;
+        } catch (Exception e) { return current == null ? "" : current.headline; }
+    }
+
     private void show(StoryCluster c, boolean fresh, boolean startTimer) {
         readTimer.stop();
         if (c == null) { detail.setText(Html.empty(emptyMessage)); current = null; return; }
@@ -62,7 +74,7 @@ final class StoryPane extends JScrollPane {
         var cs = host.service().connections();
         suggestions = cs.suggestions(c);
         detail.setText(Html.story(c, true, highlight, true, new Html.Extras(reads.isStarred(c), host.service().regions().spread(c), reads.hasNewSinceRead(c),
-                (a, b) -> host.service().linkChecks().find(a, b), host.service().store()::hasFullText, suggestions, cs.checked(c), host::storyWithArticles)));
+                (a, b) -> host.service().linkChecks().find(a, b), host.service().store()::hasFullText, suggestions, cs.checked(c), host::storyWithArticles, host.service().store()::fullText)));
         detail.setCaretPosition(Math.min(pos, detail.getDocument().getLength()));
         current = c;
         if (fresh && startTimer) readTimer.restart();
@@ -130,6 +142,16 @@ final class StoryPane extends JScrollPane {
         } else if (href.startsWith("full:") && current != null) {
             String id = href.substring(5);
             current.articles.stream().filter(a -> a.id.equals(id)).findFirst().ifPresent(this::showFullText);
+        } else if (href.equals("case:") && current != null) {
+            CaseFilesDialog.addStory(this, host, current);
+            refresh();
+        } else if (href.equals("speak:") && current != null) {
+            host.readAloud(plainText());
+        } else if (href.startsWith("entity:")) {
+            host.showEntity(java.net.URLDecoder.decode(href.substring(7), java.nio.charset.StandardCharsets.UTF_8));
+        } else if ((href.equals("morecov:") || href.equals("lesscov:")) && current != null) {
+            if (href.equals("morecov:")) Html.expandedCoverage.add(current.id); else Html.expandedCoverage.remove(current.id);
+            refresh();
         } else if (href.equals("combined:") && current != null) {
             host.combinedArticle(current);
         } else if (href.equals("connect:") && current != null) {

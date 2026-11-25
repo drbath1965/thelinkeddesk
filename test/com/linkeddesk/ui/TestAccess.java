@@ -26,6 +26,10 @@ public final class TestAccess {
         return Html.story(c, true, null, true, new Html.Extras(false, null, false, null, null, sugg, checked, ids -> null));
     }
 
+    public static void expandCoverage(String id, boolean on) { if (on) Html.expandedCoverage.add(id); else Html.expandedCoverage.remove(id); }
+    public static void claude(boolean on) { Html.setClaude(on); }
+    public static String entityHtml(com.linkeddesk.analysis.EntityPage e) { return Html.entity(e, java.util.Set.of()); }
+
     public static String explainerHtml(com.linkeddesk.ai.Explainer.Result r) { return Html.explainer(r, ""); }
 
     public static String framingHtml(com.linkeddesk.ai.Framing.Result r) { return Html.framing(r, ""); }

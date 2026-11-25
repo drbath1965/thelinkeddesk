@@ -52,7 +52,7 @@ final class WatchPanel extends JPanel {
         edit.addActionListener(e -> editSelected());
         delete.addActionListener(e -> deleteSelected());
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 4));
-        JButton explain = new JButton("Explain");
+        JButton explain = Html.claudeOnly(new JButton("Explain"));
         explain.setToolTipText("Claude reads this watch's stories and explains the subject");
         explain.addActionListener(e -> { var w = list.getSelectedValue(); if (w != null) host.explainSubject(w.name(), browser.shown()); });
         buttons.add(add); buttons.add(edit); buttons.add(delete); buttons.add(explain);
@@ -97,7 +97,7 @@ final class WatchPanel extends JPanel {
             }
             @Override protected void done() {
                 if (my != run) return;
-                try { counts.clear(); counts.putAll(get()); list.repaint(); host.watchesChanged(); } catch (Exception ignored) { }
+                try { counts.clear(); counts.putAll(get()); list.repaint(); host.watchesChanged(); } catch (Exception ex) { com.linkeddesk.app.Logs.error("Counting watch stories", ex); }
             }
         }.execute();
     }
@@ -131,7 +131,7 @@ final class WatchPanel extends JPanel {
                     counts.computeIfPresent(w.name(), (k, v) -> new int[]{0, v[1]});
                     list.repaint();
                     host.watchesChanged();
-                } catch (Exception ex) { info.setText("Could not show the watch: " + ex.getMessage()); }
+                } catch (Exception ex) { com.linkeddesk.app.Logs.error("Showing a watch", ex); info.setText("Could not show the watch: " + ex.getMessage()); }
             }
         }.execute();
     }

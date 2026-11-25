@@ -94,6 +94,15 @@ final class ExplainersPanel extends JPanel {
         page.setCaretPosition(0);
     }
 
+    /** The open explainer or article as plain text (for reading aloud). */
+    String pageText() {
+        try {
+            String t = page.getDocument().getText(0, page.getDocument().getLength());
+            int cut = t.indexOf("Articles Claude read");
+            return cut > 0 ? t.substring(0, cut) : t;
+        } catch (Exception e) { return ""; }
+    }
+
     /** Export… for News > Export when this tab is showing; false if no explainer is open. */
     boolean exportOpen() { if (current == null) return false; link("export:"); return true; }
 
@@ -180,6 +189,7 @@ final class ExplainersPanel extends JPanel {
         if (href.startsWith("try:")) { start(href.substring(4), null); return; }
         if (current == null) return;
         switch (href) {
+            case "speak:" -> host.readAloud(pageText());
             case "simpler:" -> more(null);
             case "update:" -> start(current.subject(), null, current.level());
             case "detailed:" -> start(current.subject(), null, current.level() == Explainer.Level.QUICK ? Explainer.Level.DETAILED : Explainer.Level.QUICK);

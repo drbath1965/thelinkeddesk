@@ -43,6 +43,14 @@ interface Host {
 
     /** Copies a story with its sources to the clipboard; saves it as a file (EXP-F01). */
     default void copyStory(StoryCluster c) { }
+    /** Opens a story by id in the Stories tab. */
+    default void openStoryById(String id) { }
+    /** Reads text aloud with the computer's voice (UI-F20). */
+    default void readAloud(String text) { }
+    /** The page for a person, company or place (UI-F18). */
+    default void showEntity(String name) { }
+    /** The full Coming up list (ANL-F16). */
+    default void showComingUp() { }
     /** One article from a story and its linked stories (AI-F10). */
     default void combinedArticle(StoryCluster c) { }
     /** Find connections with Claude (AI-F09): shows the cost, asks, then shows what Claude found on the story. */

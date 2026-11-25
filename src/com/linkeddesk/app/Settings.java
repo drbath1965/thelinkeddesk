@@ -12,29 +12,38 @@ import java.util.Properties;
 /** User settings, stored in settings.properties next to the data folder. */
 public final class Settings {
     private final Properties p = new Properties();
+    /** True if the file couldn't be read: then it isn't saved over (OPS-F08). */
+    private boolean unreadable;
 
     public static Settings load() {
         Settings s = new Settings();
-        if (Files.exists(AppPaths.settingsFile())) {
-            try (Reader r = Files.newBufferedReader(AppPaths.settingsFile(), StandardCharsets.UTF_8)) {
-                s.p.load(r);
-            } catch (IOException ignored) { /* fall back to defaults */ }
-        }
+        try {
+            String text = SafeFiles.readString(AppPaths.settingsFile());
+            if (!text.isEmpty()) s.p.load(new java.io.StringReader(text));
+        } catch (IOException e) { s.unreadable = true; }
         return s;
     }
 
-    /** Re-reads the file so values written by another process (the daily task) are seen. */
+    /** Re-reads the file so values written by another process (the daily task) are seen. If it can't be read, keeps what it had. */
     public synchronized void reload() {
         Settings fresh = load();
+        unreadable = fresh.unreadable;
+        if (fresh.unreadable) return;
         p.clear();
         p.putAll(fresh.p);
     }
 
+    public synchronized boolean unreadable() { return unreadable; }
+
     public synchronized void save() {
-        try (Writer w = Files.newBufferedWriter(AppPaths.settingsFile(), StandardCharsets.UTF_8)) {
+        if (unreadable) reload();
+        if (unreadable) { Logs.error("settings.properties couldn't be read, so settings weren't saved (nothing was lost)", null); return; }
+        try {
+            java.io.StringWriter w = new java.io.StringWriter();
             p.store(w, "The Linked Desk settings");
+            SafeFiles.write(AppPaths.settingsFile(), w.toString());
         } catch (IOException e) {
-            System.err.println("Could not save settings: " + e.getMessage());
+            Logs.error("Could not save settings", e);
         }
     }
 
@@ -142,6 +151,14 @@ public final class Settings {
         catch (NumberFormatException e) { return 0; }
     }
     public synchronized void setConnectionsDaily(int n) { p.setProperty("connectionsDaily", Integer.toString(Math.max(0, Math.min(20, n)))); }
+
+    /** Read aloud (UI-F20): the voice (blank = the computer's default) and speed (-5 slow … 5 fast). */
+    public synchronized String speechVoice() { return p.getProperty("speechVoice", "").trim(); }
+    public synchronized void setSpeechVoice(String v) { p.setProperty("speechVoice", v == null ? "" : v.trim()); }
+    public synchronized int speechRate() {
+        try { return Math.max(-5, Math.min(5, Integer.parseInt(p.getProperty("speechRate", "0").trim()))); } catch (NumberFormatException e) { return 0; }
+    }
+    public synchronized void setSpeechRate(int r) { p.setProperty("speechRate", Integer.toString(Math.max(-5, Math.min(5, r)))); }
 
     /** After the daily download: Claude writes one combined article for each of this many top linked stories (0 = off; AI-F10). */
     public synchronized int combinedDaily() {

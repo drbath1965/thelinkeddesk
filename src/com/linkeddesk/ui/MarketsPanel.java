@@ -94,7 +94,7 @@ final class MarketsPanel extends JPanel {
             }
             @Override protected void done() {
                 if (my != run) return;
-                try { counts.clear(); counts.putAll(get()); list.repaint(); } catch (Exception ignored) { }
+                try { counts.clear(); counts.putAll(get()); list.repaint(); } catch (Exception ex) { com.linkeddesk.app.Logs.error("Counting ticker stories", ex); }
             }
         }.execute();
     }
@@ -124,7 +124,7 @@ final class MarketsPanel extends JPanel {
                     browser.setStories(s, get().stories(), null, "No stories about " + t.label() + " in the last " + DAYS + " days.");
                     info.setText("<html><b>" + Html.esc(t.label()) + "</b> · " + s.size() + " stories on " + perDay.size() + (perDay.size() == 1 ? " day" : " days")
                             + " · matched by " + Html.esc(t.names().isEmpty() ? "$" + t.symbol() : "$" + t.symbol() + ", " + String.join(", ", t.names())) + "</html>");
-                } catch (Exception ex) { info.setText("Could not show the ticker: " + ex.getMessage()); }
+                } catch (Exception ex) { com.linkeddesk.app.Logs.error("Showing a ticker", ex); info.setText("Could not show the ticker: " + ex.getMessage()); }
             }
         }.execute();
     }

@@ -38,19 +38,28 @@ public final class ReadState {
     }
 
     /** Reads both files (again, if another process changed them). */
+    private boolean readFailed, starsFailed;
+
     public synchronized ReadState load() {
         try {
             long rs = stamp(readFile);
-            if (rs != readStamp) {
-                read.clear();
-                if (Files.exists(readFile)) for (String l : Files.readAllLines(readFile, StandardCharsets.UTF_8)) if (!l.isBlank()) read.add(l.strip());
-                readStamp = rs;
+            if (rs != readStamp || readFailed) {
+                try {
+                    List<String> lines = com.linkeddesk.app.SafeFiles.readLines(readFile);
+                    read.clear();
+                    for (String l : lines) if (!l.isBlank()) read.add(l.strip());
+                    readStamp = rs;
+                    readFailed = false;
+                } catch (com.linkeddesk.app.SafeFiles.Unreadable u) { readFailed = true; }
             }
             long ss = stamp(starFile);
-            if (ss != starStamp) {
-                stars.clear();
-                if (Files.exists(starFile)) {
-                    for (String l : Files.readAllLines(starFile, StandardCharsets.UTF_8)) {
+            if (ss != starStamp || starsFailed) {
+                List<String> lines;
+                try { lines = com.linkeddesk.app.SafeFiles.readLines(starFile); starsFailed = false; }
+                catch (com.linkeddesk.app.SafeFiles.Unreadable u) { starsFailed = true; lines = null; }
+                if (lines != null) {
+                    stars.clear();
+                    for (String l : lines) {
                         if (l.isBlank() || l.startsWith("#")) continue;
                         String[] p = l.split("\t", -1);
                         if (p.length < 2) continue;
@@ -113,6 +122,7 @@ public final class ReadState {
     /** Marks the story unread again (forgets its articles as read). */
     public synchronized void markUnread(StoryCluster c) throws IOException {
         boolean changed = false;
+        com.linkeddesk.app.SafeFiles.checkSafeToSave(readFailed, readFile);
         for (Article a : c.articles) changed |= read.remove(a.id);
         if (!changed) return;
         StringBuilder sb = new StringBuilder();
@@ -131,6 +141,8 @@ public final class ReadState {
     }
 
     public synchronized void star(StoryCluster c) throws IOException {
+        load();
+        com.linkeddesk.app.SafeFiles.checkSafeToSave(starsFailed, starFile);
         if (isStarred(c)) return;
         Set<String> ids = new LinkedHashSet<>();
         for (Article a : c.articles) ids.add(a.id);
@@ -140,6 +152,8 @@ public final class ReadState {
     }
 
     public synchronized void unstar(StoryCluster c) throws IOException {
+        load();
+        com.linkeddesk.app.SafeFiles.checkSafeToSave(starsFailed, starFile);
         Set<String> ids = new HashSet<>();
         for (Article a : c.articles) ids.add(a.id);
         stars.removeIf(s -> !java.util.Collections.disjoint(s.ids(), ids));
@@ -160,10 +174,5 @@ public final class ReadState {
         starStamp = stamp(starFile);
     }
 
-    private static void write(Path f, String text) throws IOException {
-        Files.createDirectories(f.getParent());
-        Path tmp = f.resolveSibling(f.getFileName() + ".tmp");
-        Files.writeString(tmp, text, StandardCharsets.UTF_8);
-        Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-    }
+    private static void write(Path f, String text) throws IOException { com.linkeddesk.app.SafeFiles.write(f, text); }
 }

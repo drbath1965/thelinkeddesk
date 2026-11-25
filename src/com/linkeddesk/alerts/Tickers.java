@@ -85,8 +85,8 @@ public final class Tickers {
         list.clear();
         patterns.clear();
         try {
-            if (Files.exists(file)) {
-                for (String raw : Files.readAllLines(file, StandardCharsets.UTF_8)) {
+            {
+                for (String raw : com.linkeddesk.app.SafeFiles.readLines(file)) {
                     String line = raw.strip();
                     if (line.isEmpty() || line.startsWith("#")) continue;
                     int eq = line.indexOf('=');
@@ -98,7 +98,8 @@ public final class Tickers {
                     list.add(new Ticker(sym, names));
                 }
             }
-        } catch (IOException ignored) { }
+            unreadable = false;
+        } catch (IOException e) { unreadable = true; stamp = Long.MIN_VALUE; }
         for (Ticker t : list) patterns.add(pattern(t));
         return this;
     }
@@ -117,7 +118,10 @@ public final class Tickers {
     public synchronized List<Ticker> all() { return List.copyOf(list); }
     public synchronized boolean isEmpty() { return list.isEmpty(); }
 
+    private boolean unreadable;
+
     public synchronized void save(List<Ticker> tickers) throws IOException {
+        com.linkeddesk.app.SafeFiles.checkSafeToSave(unreadable, file);
         StringBuilder sb = new StringBuilder(HEADER);
         for (Ticker t : tickers) {
             sb.append(t.symbol());
@@ -125,9 +129,7 @@ public final class Tickers {
             if (!t.names().isEmpty() && !t.names().equals(known)) sb.append(" = ").append(String.join(", ", t.names()));
             sb.append('\n');
         }
-        Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
-        Files.writeString(tmp, sb.toString(), StandardCharsets.UTF_8);
-        Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        com.linkeddesk.app.SafeFiles.write(file, sb.toString());
         stamp = Long.MIN_VALUE;
         load();
     }

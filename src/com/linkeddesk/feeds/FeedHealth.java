@@ -64,11 +64,15 @@ public final class FeedHealth {
 
     public Path file() { return file; }
 
+    private boolean unreadable;
+
     public synchronized FeedHealth load() {
+        List<String> lines;
+        try { lines = com.linkeddesk.app.SafeFiles.readLines(file); unreadable = false; }
+        catch (com.linkeddesk.app.SafeFiles.Unreadable u) { unreadable = true; return this; }
         entries.clear();
-        if (!Files.exists(file)) return this;
-        try {
-            for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
+        {
+            for (String line : lines) {
                 String[] p = line.split("\t", -1);
                 if (p.length < 11 || p[0].startsWith("#")) continue;
                 Entry e = new Entry(p[0]);
@@ -82,11 +86,13 @@ public final class FeedHealth {
                 }
                 entries.put(e.url, e);
             }
-        } catch (IOException ignored) { }
+        }
         return this;
     }
 
     public synchronized void save() throws IOException {
+        if (unreadable) load();
+        com.linkeddesk.app.SafeFiles.checkSafeToSave(unreadable, file);
         StringBuilder sb = new StringBuilder("# url\tname\tlastSuccess\tlastErrorAt\tlastError\tfailures\tpausedUntil\tetag\tlastModified\tlastChecked\taddedPerDay\n");
         for (Entry e : entries.values()) {
             StringBuilder days = new StringBuilder();
@@ -98,10 +104,7 @@ public final class FeedHealth {
                     clean(e.lastError), Integer.toString(e.failures), Long.toString(e.pausedUntil), clean(e.etag),
                     clean(e.lastModified), Long.toString(e.lastChecked), days)).append('\n');
         }
-        Files.createDirectories(file.getParent());
-        Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
-        Files.writeString(tmp, sb.toString(), StandardCharsets.UTF_8);
-        Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        com.linkeddesk.app.SafeFiles.write(file, sb.toString());
     }
 
     public synchronized Entry get(String url) {

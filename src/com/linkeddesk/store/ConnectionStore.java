@@ -27,6 +27,7 @@ public final class ConnectionStore {
     private final Path file;
     private final List<Entry> entries = new ArrayList<>();
     private long loadedStamp = Long.MIN_VALUE;
+    private boolean unreadable;
 
     public ConnectionStore(Path file) { this.file = file; }
 
@@ -131,12 +132,14 @@ public final class ConnectionStore {
     private void load() {
         long st;
         try { st = Files.exists(file) ? Files.getLastModifiedTime(file).toMillis() * 31 + Files.size(file) : -1; } catch (IOException e) { st = -2; }
-        if (st == loadedStamp) return;
+        if (st == loadedStamp && !unreadable) return;
+        List<String> lines;
+        try { lines = com.linkeddesk.app.SafeFiles.readLines(file); unreadable = false; }
+        catch (com.linkeddesk.app.SafeFiles.Unreadable u) { unreadable = true; return; }
         entries.clear();
         loadedStamp = st;
-        if (st < 0) return;
-        try {
-            for (String l : Files.readAllLines(file, StandardCharsets.UTF_8)) {
+        {
+            for (String l : lines) {
                 if (l.isBlank() || l.startsWith("#")) continue;
                 String[] p = l.split("\t", -1);
                 if (p.length < 10) continue;
@@ -147,10 +150,11 @@ public final class ConnectionStore {
                     entries.add(new Entry(s, Long.parseLong(p[1]), k, c, set(p[4]), set(p[5]), p[6], p[7], p[8], p[9]));
                 } catch (IllegalArgumentException ignored) { }
             }
-        } catch (IOException ignored) { }
+        }
     }
 
     private void save() throws IOException {
+        com.linkeddesk.app.SafeFiles.checkSafeToSave(unreadable, file);
         Files.createDirectories(file.toAbsolutePath().getParent());
         StringBuilder sb = new StringBuilder("# Connections Claude found (The Linked Desk). status\\ttime\\tkind\\tconfidence\\tids A\\tids B\\theadline A\\theadline B\\tlink B\\treason\n");
         for (Entry e : entries)
@@ -158,9 +162,7 @@ public final class ConnectionStore {
               .append(e.confidence() == null ? "" : e.confidence().name()).append('\t').append(String.join(",", e.a())).append('\t')
               .append(String.join(",", e.b())).append('\t').append(clean(e.headlineA())).append('\t').append(clean(e.headlineB())).append('\t')
               .append(clean(e.urlB())).append('\t').append(clean(e.reason())).append('\n');
-        Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
-        Files.writeString(tmp, sb.toString(), StandardCharsets.UTF_8);
-        Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        com.linkeddesk.app.SafeFiles.write(file, sb.toString());
         loadedStamp = Files.getLastModifiedTime(file).toMillis() * 31 + Files.size(file);
     }
 

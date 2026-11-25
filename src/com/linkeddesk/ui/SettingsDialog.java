@@ -19,6 +19,8 @@ final class SettingsDialog extends JDialog {
     private final JPasswordField apiKey = new JPasswordField(32);
     private final JTextField model = new JTextField(20);
     private final JComboBox<String> theme = new JComboBox<>(new String[]{"Light", "Dark"});
+    private final JComboBox<String> voice = new JComboBox<>();
+    private final JSlider rate = new JSlider(-5, 5, 0);
     private final JComboBox<String> textSize = new JComboBox<>(java.util.Arrays.stream(Theme.SIZES).mapToObj(n -> n + "%").toArray(String[]::new));
     private final JCheckBox briefing = new JCheckBox("Show the briefing when the app opens and after each daily download");
     private boolean lookChanged;
@@ -61,6 +63,18 @@ final class SettingsDialog extends JDialog {
         theme.setSelectedIndex("dark".equalsIgnoreCase(settings.theme()) ? 1 : 0);
         if (java.util.Arrays.stream(Theme.SIZES).noneMatch(n -> n == settings.textSize())) textSize.addItem(settings.textSize() + "%");
         textSize.setSelectedItem(settings.textSize() + "%");
+        voice.setEditable(true);
+        voice.addItem("");
+        if (!settings.speechVoice().isEmpty()) voice.addItem(settings.speechVoice());
+        voice.setSelectedItem(settings.speechVoice());
+        rate.setValue(settings.speechRate());
+        rate.setMajorTickSpacing(5); rate.setPaintTicks(true);
+        new SwingWorker<java.util.List<String>, Void>() {
+            @Override protected java.util.List<String> doInBackground() { return com.linkeddesk.app.Speech.voices(); }
+            @Override protected void done() {
+                try { for (String v : get()) if (!v.equals(settings.speechVoice())) voice.addItem(v); } catch (Exception ignored) { /* voices are optional */ }
+            }
+        }.execute();
         briefing.setSelected(settings.showBriefing());
         budget.setText(String.format(java.util.Locale.ROOT, "%.2f", settings.claudeBudget()));
         digest.setSelected(settings.claudeDigest());
@@ -128,6 +142,8 @@ final class SettingsDialog extends JDialog {
         g.gridwidth = 1;
         form.add(new JLabel("Colours:"), g); g.gridx = 1; form.add(theme, g); g.gridx = 0; g.gridy++;
         form.add(new JLabel("Text size:"), g); g.gridx = 1; form.add(textSize, g); g.gridx = 0; g.gridy++;
+        form.add(new JLabel("Read-aloud voice:"), g); g.gridx = 1; form.add(voice, g); g.gridx = 0; g.gridy++;
+        form.add(new JLabel("Read-aloud speed:"), g); g.gridx = 1; form.add(rate, g); g.gridx = 0; g.gridy++;
         g.gridwidth = 2;
         form.add(briefing, g); g.gridy++;
         form.add(note("Text size adds to Windows' own display scaling (Settings > Display > Scale), which the app follows. "
@@ -207,7 +223,10 @@ final class SettingsDialog extends JDialog {
         form.add(section("News sources"), g); g.gridy++;
         JPanel feeds = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         JButton editFeeds = new JButton("Edit feed list…");
-        editFeeds.addActionListener(e -> new FeedEditorDialog(this).setVisible(true));
+        editFeeds.addActionListener(e -> {
+            try { new FeedEditorDialog(this).setVisible(true); }
+            catch (java.io.IOException ex) { JOptionPane.showMessageDialog(this, ex.getMessage(), "Feed list", JOptionPane.WARNING_MESSAGE); }
+        });
         JButton openFolder = new JButton("Open data folder");
         openFolder.addActionListener(e -> {
             try { Desktop.getDesktop().open(AppPaths.home().toFile()); } catch (Exception ex) { error(ex); }
@@ -311,6 +330,8 @@ final class SettingsDialog extends JDialog {
         }
         settings.setModel(model.getText());
         String th = theme.getSelectedIndex() == 1 ? "dark" : "light";
+        settings.setSpeechVoice(voice.getSelectedItem() == null ? "" : voice.getSelectedItem().toString());
+        settings.setSpeechRate(rate.getValue());
         int size = Integer.parseInt(((String) textSize.getSelectedItem()).replace("%", ""));
         lookChanged = !th.equalsIgnoreCase(settings.theme()) || size != settings.textSize();
         settings.setTheme(th);

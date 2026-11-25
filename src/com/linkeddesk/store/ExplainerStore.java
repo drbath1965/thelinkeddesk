@@ -80,7 +80,7 @@ public final class ExplainerStore {
         if (!Files.isDirectory(dir)) return out;
         try (Stream<Path> s = Files.list(dir)) {
             for (Path f : s.filter(p -> p.toString().endsWith(".txt")).toList()) {
-                try { out.add(read(f)); } catch (Exception ignored) { }
+                try { out.add(read(f)); } catch (Exception ex) { com.linkeddesk.app.Logs.error("Reading explainer " + f.getFileName(), ex); }
             }
         } catch (IOException ignored) { }
         out.sort(Comparator.comparingLong(Explainer.Result::created).reversed());

@@ -64,6 +64,8 @@ public final class MainWindow extends JFrame implements Host {
     private final WorldPanel world;
     private final AskPanel askPanel;
     private final ExplainersPanel explainersPanel;
+    private Component threadSplitRef, lineSplitRef;
+    private final Switcher storiesTab = new Switcher(), threadsTab = new Switcher(), mapsTab = new Switcher(), claudeTab = new Switcher();
     private final TimelinePanel threadTimeline = new TimelinePanel();
     private final TimelinePanel lineTimeline = new TimelinePanel();
     private Analyzer.Result savedResult = new Analyzer.Result(List.of(), List.of(), 0);
@@ -163,13 +165,14 @@ public final class MainWindow extends JFrame implements Host {
             else if (e.getDescription().equals("explain:") && threadList.getSelectedValue() != null)
                 explainSubject(threadList.getSelectedValue().topic(), threadList.getSelectedValue().stories());
             else if (e.getDescription().equals("combined:") && threadList.getSelectedValue() != null) {
-                tabs.setSelectedComponent(explainersPanel);
+                show(explainersPanel);
                 explainersPanel.start(threadList.getSelectedValue().topic(), threadList.getSelectedValue().stories(), com.linkeddesk.ai.Explainer.Level.ARTICLE);
             }
         });
         JSplitPane threadRight = new JSplitPane(JSplitPane.VERTICAL_SPLIT, threadTimeline, new JScrollPane(threadPane));
         threadRight.setResizeWeight(0.3);
         JSplitPane threadSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, new JScrollPane(threadList), threadRight);
+        threadSplitRef = threadSplit;
         threadSplit.setDividerLocation(520);
         threadPane.setText(Html.empty("Threads appear once stories are linked."));
 
@@ -190,20 +193,22 @@ public final class MainWindow extends JFrame implements Host {
         JSplitPane lineRight = new JSplitPane(JSplitPane.VERTICAL_SPLIT, lineTimeline, new JScrollPane(linePane));
         lineRight.setResizeWeight(0.3);
         JSplitPane lineSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, new JScrollPane(lineList), lineRight);
+        lineSplitRef = lineSplit;
         lineSplit.setDividerLocation(520);
         linePane.setText(Html.empty("Storylines appear when an event is reported again on later days."));
 
+        // Fewer tabs (UI-F16): related views share a tab, with buttons to switch between them.
+        storiesTab.addView("Stories", stories).addView("Starred", saved);
+        threadsTab.addView("Threads", threadSplit).addView("Storylines", lineSplit);
+        mapsTab.addView("Connection map", map).addView("World", world);
+        claudeTab.addView("Explainers & articles", explainersPanel).addView("Ask", askPanel);
         tabs.addTab("Briefing", briefing);
         tabs.addTab("Since last visit", sincePanel);
-        tabs.addTab("Stories", stories);
-        tabs.addTab("Saved", saved);
+        tabs.addTab("Stories", storiesTab);
         tabs.addTab("Watchlist", watchPanel);
-        tabs.addTab("Storylines", lineSplit);
-        tabs.addTab("Threads", threadSplit);
-        tabs.addTab("Map", map);
-        tabs.addTab("World", world);
-        tabs.addTab("Ask", askPanel);
-        tabs.addTab("Explainers", explainersPanel);
+        tabs.addTab("Threads", threadsTab);
+        tabs.addTab("Maps", mapsTab);
+        tabs.addTab("Claude", claudeTab);
         tabs.addTab("Markets", markets);
         tabs.addTab("Topics", topics);
         tabs.addTab("Search", search);
@@ -233,8 +238,10 @@ public final class MainWindow extends JFrame implements Host {
         unreadOnly.addActionListener(e -> refreshLists(null));
         installShortcuts();
         installZoom();
+        applyClaude();
+        Html.caseNames = s -> service.caseFiles().containing(s).stream().map(com.linkeddesk.store.CaseFiles.CaseFile::name).toList();
         tabs.addChangeListener(e -> {
-            if (tabs.getSelectedComponent() == topics && System.currentTimeMillis() - suggestionsAt > 10 * 60_000L) { suggestionsAt = System.currentTimeMillis(); topics.refreshSuggestions(); }
+            if (current() == topics && System.currentTimeMillis() - suggestionsAt > 10 * 60_000L) { suggestionsAt = System.currentTimeMillis(); topics.refreshSuggestions(); }
         });
         // Remember when the app was last open, for "Since you last looked" next time.
         new Timer(5 * 60_000, e -> markActive()).start();
@@ -256,24 +263,32 @@ public final class MainWindow extends JFrame implements Host {
         news.add(item("Export…", KeyEvent.VK_E, e -> exportCurrent()));
         news.add(item("Copy the open story", 0, e -> { StoryCluster c = openStory(); if (c != null) copyStory(c); else status.setText("Open a story first."); }));
         news.add(item("Weekly report…", 0, e -> openWeeklyReport()));
+        news.add(item("Coming up…", 0, e -> showComingUp()));
+        news.add(item("Case files…", 0, e -> new CaseFilesDialog(this, this, null).setVisible(true)));
+        news.add(item("Person, company or place…", 0, e -> {
+            String n = JOptionPane.showInputDialog(this, "Name (e.g. Lockheed Martin, Redstone Arsenal, Zelenskyy):", "Person, company or place", JOptionPane.QUESTION_MESSAGE);
+            if (n != null && !n.isBlank()) showEntity(n.strip());
+        }));
         news.addSeparator();
         news.add(item("Test all feeds", 0, e -> { openHealth(); }));
         news.add(item("Feed health…", 0, e -> openHealth()));
         news.addSeparator();
         news.add(item("Exit", 0, e -> dispatchEvent(new WindowEvent(this, WindowEvent.WINDOW_CLOSING))));
         JMenu tmenu = new JMenu("Topics");
-        tmenu.add(item("Add topic…", 0, e -> { tabs.setSelectedComponent(topics); topics.addTopic(); }));
-        tmenu.add(item("Show topics", 0, e -> tabs.setSelectedComponent(topics)));
+        tmenu.add(item("Add topic…", 0, e -> { show(topics); topics.addTopic(); }));
+        tmenu.add(item("Show topics", 0, e -> show(topics)));
         JMenu find = new JMenu("Search");
         find.add(item("Search all news…", KeyEvent.VK_F, e -> openSearch()));
         JMenu view = new JMenu("View");
-        view.add(item("Briefing", 0, e -> tabs.setSelectedComponent(briefing)));
-        view.add(item("Saved stories", 0, e -> tabs.setSelectedComponent(saved)));
-        view.add(item("Watchlist", 0, e -> tabs.setSelectedComponent(watchPanel)));
-        view.add(item("Markets", 0, e -> tabs.setSelectedComponent(markets)));
-        view.add(item("Connection map", 0, e -> tabs.setSelectedComponent(map)));
-        view.add(item("World map", 0, e -> tabs.setSelectedComponent(world)));
-        view.add(item("Ask about the news", 0, e -> { tabs.setSelectedComponent(askPanel); askPanel.focusQuestion(); }));
+        view.add(item("Briefing", 0, e -> show(briefing)));
+        view.add(item("Read aloud", 0, e -> readCurrent()));
+        view.add(item("Stop reading", 0, e -> { com.linkeddesk.app.Speech.stop(); status.setText("Stopped reading."); }));
+        view.add(item("Starred stories", 0, e -> show(saved)));
+        view.add(item("Watchlist", 0, e -> show(watchPanel)));
+        view.add(item("Markets", 0, e -> show(markets)));
+        view.add(item("Connection map", 0, e -> show(map)));
+        view.add(item("World map", 0, e -> show(world)));
+        view.add(item("Ask about the news", 0, e -> { show(askPanel); askPanel.focusQuestion(); }));
         view.addSeparator();
         JCheckBoxMenuItem hideOp = new JCheckBoxMenuItem("Hide opinion and analysis pieces", service.settings().hideOpinion());
         hideOp.addActionListener(e -> {
@@ -329,8 +344,8 @@ public final class MainWindow extends JFrame implements Host {
             @Override protected void done() {
                 try { get(); } catch (Exception ex) { status.setText("Could not read saved news: " + rootMessage(ex)); }
                 topics.reload(null);
-                if (service.settings().showBriefing()) tabs.setSelectedComponent(briefing);
-                else tabs.setSelectedComponent(stories);
+                if (service.settings().showBriefing()) show(briefing);
+                else show(stories);
                 briefing.reload();
                 reloadSaved();
                 watchPanel.reload();
@@ -353,7 +368,7 @@ public final class MainWindow extends JFrame implements Host {
         // Notifications held during quiet hours are shown once they end.
         Timer held = new Timer(5 * 60_000, e -> {
             if (tray == null) return;
-            new Thread(() -> { try { service.flushHeldAlerts(tray); } catch (Exception ignored) { } }, "held-alerts").start();
+            new Thread(() -> { try { service.flushHeldAlerts(tray); } catch (Exception ex) { com.linkeddesk.app.Logs.error("Showing held alerts", ex); } }, "held-alerts").start();
         });
         held.start();
     }
@@ -388,7 +403,7 @@ public final class MainWindow extends JFrame implements Host {
                     StoryCluster sel = saved.selected();
                     saved.setStories(savedResult.stories(), savedResult.stories(), sel == null ? null : sel.id,
                             "Nothing saved yet. Click ☆ Star on any story to keep it here.");
-                    tabs.setTitleAt(tabs.indexOfComponent(saved), "Saved (" + savedResult.stories().size() + ")");
+                    title(saved, "Starred (" + savedResult.stories().size() + ")");
                 } catch (Exception ex) { status.setText("Could not show saved stories: " + rootMessage(ex)); }
             }
         }.execute();
@@ -484,7 +499,7 @@ public final class MainWindow extends JFrame implements Host {
             analyze(null);
             briefing.reload();
             reloadSaved();
-            if (daily && service.settings().showBriefing()) tabs.setSelectedComponent(briefing);
+            if (daily && service.settings().showBriefing()) show(briefing);
             if (daily) runDailyClaude();
             watchPanel.reload();
             markets.reload();
@@ -555,7 +570,7 @@ public final class MainWindow extends JFrame implements Host {
                 return changed;
             }
             @Override protected void done() {
-                try { if (get()) { topics.reload(null); analyze(null); } } catch (Exception ignored) { }
+                try { if (get()) { topics.reload(null); analyze(null); } } catch (Exception ex) { com.linkeddesk.app.Logs.error("Reloading topics after a download", ex); }
             }
         }.execute();
     }
@@ -616,9 +631,9 @@ public final class MainWindow extends JFrame implements Host {
         else linePane.setText(Html.empty("Storylines appear when an event is reported again on later days."));
         if (wordsDialog != null && wordsDialog.isShowing()) wordsDialog.show(result);
         long unread = list.stream().filter(reads::isUnread).count();
-        tabs.setTitleAt(tabs.indexOfComponent(stories), "Stories (" + list.size() + (unread > 0 && unread < list.size() ? ", " + unread + " unread" : "") + ")");
-        tabs.setTitleAt(tabs.indexOfComponent(lineList.getParent().getParent().getParent()), "Storylines (" + lines.size() + ")");
-        tabs.setTitleAt(tabs.indexOfComponent(threadList.getParent().getParent().getParent()), "Threads (" + threads.size() + ")");
+        title(stories, "Stories (" + list.size() + (unread > 0 && unread < list.size() ? ", " + unread + " unread" : "") + ")");
+        title(lineSplitRef, "Storylines (" + lines.size() + ")");
+        title(threadSplitRef, "Threads (" + threads.size() + ")");
         if (mapResult != result) { mapResult = result; map.setResult(result); }
         Category deskNow = d instanceof Category cat ? cat : null;
         if (worldResult != result || worldDesk != deskNow) { worldResult = result; worldDesk = deskNow; world.setResult(result, deskNow); }
@@ -635,7 +650,7 @@ public final class MainWindow extends JFrame implements Host {
     }
 
     private void openStory(String id) {
-        tabs.setSelectedComponent(stories);
+        show(stories);
         unreadOnly.setSelected(false);
         if (!stories.contains(id)) {
             desk.setSelectedIndex(0);
@@ -647,7 +662,7 @@ public final class MainWindow extends JFrame implements Host {
     }
 
     private void openSearch() {
-        tabs.setSelectedComponent(search);
+        show(search);
         search.focusQuery();
     }
 
@@ -666,10 +681,125 @@ public final class MainWindow extends JFrame implements Host {
                 + ". Paste into Word, Outlook or Gmail and the links come along.");
     }
 
+    /** Shows or hides everything that needs Claude, depending on whether an API key is saved (UI-F15). */
+    private void applyClaude() {
+        service.settings().reload();
+        boolean on = service.settings().hasApiKey();
+        boolean was = Html.claudeOn;
+        Html.setClaude(on);
+        int ci = tabs.indexOfComponent(claudeTab);
+        if (!on && ci >= 0) tabs.remove(ci);
+        if (on && ci < 0) tabs.insertTab("Claude", null, claudeTab, "Explainers, articles and questions answered by Claude", Math.min(tabs.getTabCount(), tabs.indexOfComponent(mapsTab) + 1));
+        if (was != on) refreshReading();
+    }
+
+    @Override public void openStoryById(String id) { openStory(id); }
+
+    /** Read aloud (UI-F20): the computer's own voice; another click on Read aloud (or View > Stop reading) stops it. */
+    @Override public void readAloud(String text) {
+        if (com.linkeddesk.app.Speech.speaking()) { com.linkeddesk.app.Speech.stop(); status.setText("Stopped reading."); return; }
+        service.settings().reload();
+        try {
+            com.linkeddesk.app.Speech.speak(text, service.settings().speechVoice(), service.settings().speechRate());
+            status.setText("Reading aloud… (View > Stop reading, or click Read aloud again, to stop)");
+        } catch (Exception ex) {
+            com.linkeddesk.app.Logs.error("Reading aloud", ex);
+            JOptionPane.showMessageDialog(this, ex.getMessage(), "Read aloud", JOptionPane.WARNING_MESSAGE);
+        }
+    }
+
+    /** View > Read aloud: what's on screen (the briefing, the open story, or the open explainer/article). */
+    private void readCurrent() {
+        Component t = current();
+        String text;
+        if (t == briefing) text = briefing.pageText();
+        else if (t == explainersPanel) text = explainersPanel.pageText();
+        else {
+            StoryBrowser b = t == saved ? saved : t == search ? search.browser() : t == watchPanel ? watchPanel.browser() : t == markets ? markets.browser()
+                    : t == sincePanel ? sincePanel.browser() : stories;
+            text = b.pane().plainText();
+        }
+        if (text.isBlank()) { status.setText("Open a story, the briefing or an explainer to read it aloud."); return; }
+        readAloud(text);
+    }
+
+    /** People and organization pages (UI-F18): a window per name, built from a search of the whole archive. */
+    @Override public void showEntity(String name) {
+        setBusy("Gathering everything about " + name + "…");
+        new SwingWorker<com.linkeddesk.analysis.EntityPage, Void>() {
+            @Override protected com.linkeddesk.analysis.EntityPage doInBackground() throws Exception { return service.entity(name); }
+            @Override protected void done() {
+                busy.setVisible(false);
+                updateStatus();
+                com.linkeddesk.analysis.EntityPage page;
+                try { page = get(); }
+                catch (Exception ex) { com.linkeddesk.app.Logs.error("Opening the page for " + name, ex); JOptionPane.showMessageDialog(MainWindow.this, firstMessage(ex), name, JOptionPane.WARNING_MESSAGE); return; }
+                java.util.Set<String> inView = new java.util.HashSet<>();
+                if (result != null) for (StoryCluster c : result.stories()) inView.add(c.id);
+                JEditorPane p = StoryBrowser.htmlPane();
+                p.setText(Html.entity(page, inView));
+                p.setCaretPosition(0);
+                JDialog d = new JDialog(MainWindow.this, page.name(), Dialog.ModalityType.MODELESS);
+                p.addHyperlinkListener(ev -> {
+                    if (ev.getEventType() != HyperlinkEvent.EventType.ACTIVATED) return;
+                    String h = ev.getDescription();
+                    if (h.startsWith("story:")) openStory(h.substring(6));
+                    else if (h.startsWith("entity:")) showEntity(java.net.URLDecoder.decode(h.substring(7), java.nio.charset.StandardCharsets.UTF_8));
+                    else if (h.equals("watch:")) addWatch(page.name());
+                    else if (h.equals("topic:")) { show(topics); topics.addTopic(page.name(), page.name().contains(" ") ? "\"" + page.name() + "\"" : page.name()); }
+                    else if (h.equals("explain:")) explainSubject(page.name(), page.stories().subList(0, Math.min(40, page.stories().size())));
+                    else try { Desktop.getDesktop().browse(java.net.URI.create(h)); } catch (Exception ex) { com.linkeddesk.app.Logs.error("Opening " + h, ex); }
+                });
+                JScrollPane sp = new JScrollPane(p);
+                sp.setPreferredSize(new Dimension(Math.min(860, getWidth() - 80), Math.min(720, getHeight() - 80)));
+                d.getContentPane().add(sp);
+                d.pack();
+                d.setLocationRelativeTo(MainWindow.this);
+                d.setVisible(true);
+            }
+        }.execute();
+    }
+
+    /** News > Coming up (ANL-F16): upcoming events from recent news, yours first. */
+    @Override public void showComingUp() {
+        setBusy("Finding upcoming events…");
+        new SwingWorker<List<NewsService.Upcoming>, Void>() {
+            @Override protected List<NewsService.Upcoming> doInBackground() { return service.comingUp(120); }
+            @Override protected void done() {
+                busy.setVisible(false);
+                updateStatus();
+                try {
+                    var items = get();
+                    java.util.Map<String, StoryCluster> byArticle = new java.util.HashMap<>();
+                    if (result != null) for (StoryCluster c : result.stories()) for (var a : c.articles) byArticle.put(a.id, c);
+                    JEditorPane p = StoryBrowser.htmlPane();
+                    p.setText(Html.comingUp(items, 0, true, a -> byArticle.get(a.id)));
+                    p.setCaretPosition(0);
+                    JDialog d = new JDialog(MainWindow.this, "Coming up", Dialog.ModalityType.MODELESS);
+                    p.addHyperlinkListener(ev -> {
+                        if (ev.getEventType() != HyperlinkEvent.EventType.ACTIVATED) return;
+                        String h = ev.getDescription();
+                        if (h.startsWith("story:")) openStory(h.substring(6));
+                        else try { Desktop.getDesktop().browse(java.net.URI.create(h)); } catch (Exception ex) { com.linkeddesk.app.Logs.error("Opening " + h, ex); }
+                    });
+                    JScrollPane sp = new JScrollPane(p);
+                    sp.setPreferredSize(new Dimension(Math.min(900, getWidth() - 80), Math.min(700, getHeight() - 80)));
+                    d.getContentPane().add(sp);
+                    d.pack();
+                    d.setLocationRelativeTo(MainWindow.this);
+                    d.setVisible(true);
+                } catch (Exception ex) {
+                    com.linkeddesk.app.Logs.error("Coming up", ex);
+                    JOptionPane.showMessageDialog(MainWindow.this, firstMessage(ex), "Coming up", JOptionPane.WARNING_MESSAGE);
+                }
+            }
+        }.execute();
+    }
+
     @Override public void combinedArticle(StoryCluster c) {
         List<StoryCluster> group = service.linkedGroup(c, 12);
         if (group.size() < 2) { JOptionPane.showMessageDialog(this, "This story isn't linked to any other yet. Try Explain this, or Find connections first."); return; }
-        tabs.setSelectedComponent(explainersPanel);
+        show(explainersPanel);
         explainersPanel.start(c.headline, group, com.linkeddesk.ai.Explainer.Level.ARTICLE);
     }
 
@@ -745,7 +875,7 @@ public final class MainWindow extends JFrame implements Host {
             }
             s = new ArrayList<>(more);
         }
-        tabs.setSelectedComponent(explainersPanel);
+        show(explainersPanel);
         explainersPanel.start(subject, s);
     }
 
@@ -788,16 +918,41 @@ public final class MainWindow extends JFrame implements Host {
         ExportUi.save(this, this, com.linkeddesk.export.Exporter.story(c, service.regions()), List.of(c));
     }
 
+    /** Opens the tab holding {@code c} (and, inside a shared tab, its view). */
+    private void show(Component c) {
+        for (Switcher sw : List.of(storiesTab, threadsTab, mapsTab, claudeTab))
+            if (sw.holds(c)) { if (tabs.indexOfComponent(sw) >= 0) tabs.setSelectedComponent(sw); sw.show(c); return; }
+        tabs.setSelectedComponent(c);
+    }
+
+    /** The view on screen: the selected tab, or the view showing inside a shared tab. */
+    private Component current() {
+        Component t = tabs.getSelectedComponent();
+        return t instanceof Switcher sw ? sw.current() : t;
+    }
+
+    /** Sets the label of a view: its tab title, or its button in a shared tab (the first view's label is the tab's title too). */
+    private void title(Component c, String text) {
+        for (Switcher sw : List.of(storiesTab, threadsTab, mapsTab, claudeTab))
+            if (sw.holds(c)) {
+                sw.label(c, text);
+                if (sw.isFirst(c)) { int i = tabs.indexOfComponent(sw); if (i >= 0) tabs.setTitleAt(i, text); }
+                return;
+            }
+        int i = tabs.indexOfComponent(c);
+        if (i >= 0) tabs.setTitleAt(i, text);
+    }
+
     /** The story open in the current tab, if any. */
     private StoryCluster openStory() {
-        Component t = tabs.getSelectedComponent();
+        Component t = current();
         StoryBrowser b = t == saved ? saved : t == search ? search.browser() : t == watchPanel ? watchPanel.browser() : t == markets ? markets.browser() : stories;
         return b.selected();
     }
 
     /** News > Export: what's on screen (the briefing, a thread, a storyline, the open story or the whole list). */
     private void exportCurrent() {
-        Component t = tabs.getSelectedComponent();
+        Component t = current();
         var reg = service.regions();
         if (t == briefing) {
             if (briefing.briefing() == null) { status.setText("The briefing isn't ready yet."); return; }
@@ -882,8 +1037,7 @@ public final class MainWindow extends JFrame implements Host {
     private void updateSince() {
         var r = com.linkeddesk.analysis.SinceLastVisit.compute(result.stories(), sinceBaseline, this::watchesFor);
         sincePanel.show(r, result.stories());
-        int i = tabs.indexOfComponent(sincePanel);
-        if (i >= 0) tabs.setTitleAt(i, r.isEmpty() ? "Since last visit" : "Since last visit (" + r.items().size() + ")");
+        title(sincePanel, r.isEmpty() ? "Since last visit" : "Since last visit (" + r.items().size() + ")");
     }
 
     private void openSources() {
@@ -919,7 +1073,7 @@ public final class MainWindow extends JFrame implements Host {
                 return watchRef.stories(now);
             }
             @Override protected void done() {
-                try { watchHits = get(); } catch (Exception ignored) { }
+                try { watchHits = get(); } catch (Exception ex) { com.linkeddesk.app.Logs.error("Counting watch hits", ex); }
                 stories.refreshRows();
                 saved.refreshRows();
                 updateWatchTab();
@@ -929,7 +1083,7 @@ public final class MainWindow extends JFrame implements Host {
     }
 
     @Override public void addWatch(String words) {
-        tabs.setSelectedComponent(watchPanel);
+        show(watchPanel);
         watchPanel.addWatch(words);
     }
 
@@ -946,7 +1100,7 @@ public final class MainWindow extends JFrame implements Host {
             setExtendedState(getExtendedState() & ~ICONIFIED);
             setVisible(true);
             toFront();
-            tabs.setSelectedComponent(watchPanel);
+            show(watchPanel);
         });
         tray = new com.linkeddesk.alerts.Tray(open);
         PopupMenu menu = new PopupMenu();
@@ -989,7 +1143,7 @@ public final class MainWindow extends JFrame implements Host {
                 return out.toString().strip();
             }
             @Override protected void done() {
-                try { String m = get(); if (!m.isEmpty()) status.setText(m); } catch (Exception ignored) { }
+                try { String m = get(); if (!m.isEmpty()) status.setText(m); } catch (Exception ex) { com.linkeddesk.app.Logs.error("Background maintenance", ex); }
             }
         }.execute();
     }
@@ -1082,7 +1236,7 @@ public final class MainWindow extends JFrame implements Host {
         d.testEmail = () -> service.emailBriefing(true);
         d.writePhone = () -> { var p = service.publishPhone(); return p == null ? "No folder chosen." : p.toString(); };
         d.setVisible(true);
-        if (d.wasSaved()) stories.refreshDetail();
+        if (d.wasSaved()) { applyClaude(); stories.refreshDetail(); }
         if (d.lookChanged()) applyLook();
     }
 
@@ -1127,13 +1281,13 @@ public final class MainWindow extends JFrame implements Host {
 
     /** Runs a shortcut key; true if the key was one. */
     boolean shortcut(char ch) {
-        StoryBrowser b = tabs.getSelectedComponent() == saved ? saved : stories;
+        StoryBrowser b = current() == saved ? saved : stories;
         switch (Character.toLowerCase(ch)) {
-            case 'j' -> { if (tabs.getSelectedComponent() != saved) tabs.setSelectedComponent(stories); b.step(1); }
-            case 'k' -> { if (tabs.getSelectedComponent() != saved) tabs.setSelectedComponent(stories); b.step(-1); }
+            case 'j' -> { if (current() != saved) show(stories); b.step(1); }
+            case 'k' -> { if (current() != saved) show(stories); b.step(-1); }
             case '/' -> {
-                if (tabs.getSelectedComponent() == search) search.focusQuery();
-                else { tabs.setSelectedComponent(stories); filter.requestFocusInWindow(); filter.selectAll(); }
+                if (current() == search) search.focusQuery();
+                else { show(stories); filter.requestFocusInWindow(); filter.selectAll(); }
             }
             case 's' -> toggleStar(b.selected());
             case 'u' -> {
@@ -1143,11 +1297,11 @@ public final class MainWindow extends JFrame implements Host {
                 catch (Exception ex) { status.setText("Could not save: " + rootMessage(ex)); }
             }
             case 'f' -> fetch();
-            case 'b' -> tabs.setSelectedComponent(briefing);
-            case 'm' -> tabs.setSelectedComponent(map);
-            case 'w' -> tabs.setSelectedComponent(world);
-            case 'a' -> { tabs.setSelectedComponent(askPanel); askPanel.focusQuestion(); }
-            case 'l' -> tabs.setSelectedComponent(watchPanel);
+            case 'b' -> show(briefing);
+            case 'm' -> show(map);
+            case 'w' -> show(world);
+            case 'a' -> { show(askPanel); askPanel.focusQuestion(); }
+            case 'l' -> show(watchPanel);
             case '?' -> showShortcuts();
             default -> { return false; }
         }

@@ -29,11 +29,15 @@ public final class TopicCatalog {
 
     public static Path file() { return AppPaths.home().resolve("topics.txt"); }
 
+    private static volatile boolean unreadable;
+
     public static List<Topic> load() {
         try {
-            if (!Files.exists(file())) return new ArrayList<>();
-            return parse(Files.readString(file(), StandardCharsets.UTF_8));
+            List<Topic> t = parse(com.linkeddesk.app.SafeFiles.readString(file()));
+            unreadable = false;
+            return t;
         } catch (IOException e) {
+            unreadable = true;
             return new ArrayList<>();
         }
     }
@@ -53,11 +57,10 @@ public final class TopicCatalog {
     }
 
     public static void save(List<Topic> topics) throws IOException {
+        com.linkeddesk.app.SafeFiles.checkSafeToSave(unreadable, file());
         StringBuilder sb = new StringBuilder(HEADER).append('\n');
         for (Topic t : topics) sb.append(t.toLine()).append('\n');
-        Path tmp = file().resolveSibling("topics.txt.tmp");
-        Files.writeString(tmp, sb.toString(), StandardCharsets.UTF_8);
-        Files.move(tmp, file(), java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+        com.linkeddesk.app.SafeFiles.write(file(), sb.toString());
     }
 
     /** Validation used by the Topics screen and Save as topic. Returns an error message or null. */
