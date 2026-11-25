@@ -37,6 +37,7 @@ public final class ExplainerStore {
             sb.append("ref\t").append(e.getKey()).append('\t').append(esc(s.id())).append('\t').append(esc(s.url())).append('\t').append(esc(s.source()))
               .append('\t').append(s.published()).append('\t').append(s.opinion()).append('\t').append(esc(s.title())).append('\n');
         }
+        if (!r.weak().isEmpty()) sb.append("weak\t").append(String.join(",", r.weak())).append('\n');
         for (Explainer.FollowUp fu : r.followUps()) sb.append("followup\t").append(esc(fu.label())).append('\t').append(esc(fu.text())).append('\n');
         sb.append("---\n").append(r.raw());
         Path tmp = f.resolveSibling(f.getFileName() + ".tmp");
@@ -56,6 +57,7 @@ public final class ExplainerStore {
         long created = 0, previous = 0;
         Map<String, Explainer.Source> refs = new LinkedHashMap<>();
         List<Explainer.FollowUp> follow = new ArrayList<>();
+        Set<String> weak = new LinkedHashSet<>();
         for (String l : text.substring(0, split).split("\n")) {
             String[] p = l.split("\t", -1);
             switch (p[0]) {
@@ -64,11 +66,12 @@ public final class ExplainerStore {
                 case "created" -> created = Long.parseLong(p[1]);
                 case "previous" -> previous = Long.parseLong(p[1]);
                 case "ref" -> { if (p.length >= 8) refs.put(p[1], new Explainer.Source(unesc(p[2]), unesc(p[3]), unesc(p[7]), unesc(p[4]), Long.parseLong(p[5]), Boolean.parseBoolean(p[6]))); }
+                case "weak" -> { for (String w : p[1].split(",")) if (!w.isBlank()) weak.add(w); }
                 case "followup" -> { if (p.length >= 3) follow.add(new Explainer.FollowUp(unesc(p[1]), unesc(p[2]))); }
                 default -> { }
             }
         }
-        return Explainer.parse(subject, level, created, text.substring(split + 5), refs, previous, follow);
+        return Explainer.parse(subject, level, created, text.substring(split + 5), refs, previous, follow).withWeak(weak);
     }
 
     /** All saved explainers, newest first; unreadable files are skipped. */

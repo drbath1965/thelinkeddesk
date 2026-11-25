@@ -40,6 +40,38 @@ public final class P9Test {
         return c;
     }
 
+    /** An explainer written from the "Russia" articles of the real-news sample; WATCH:1 deliberately cites the wrong article. */
+    static final String GROUNDED = """
+BOTTOM LINE:
+- Drones have hit Russian ships far from Ukraine: a cargo ship in the Baltic near Finland, and ships at a port in Libya [S2][S13][S17].
+- Ukraine says it carried out the Libya strikes; Finland's prime minister says the war is spilling over [S11][S19].
+TIMELINE:
+- Nov 8: Beijing confirms a Xi-Trump-Putin meeting is under discussion [S1]
+- Nov 23: A Russian cargo ship catches fire after a drone strike in the Baltic; Finland tightens security [S2][S3]
+- Nov 24: The ship, Sparta II, is still smouldering as Finland and Estonia help put out the blaze; its crew is evacuated [S5][S7]
+- Nov 24: The damaged ship is towed toward Russian home waters [S6][S20]
+- Nov 25: Zelenskyy says Ukrainian sea drones sank a Russian warship off Libya and hit a cargo ship [S13][S15]
+- Nov 25: Ukraine's security service says seven drones were launched from a mothership [S19]
+WHO:
+- Volodymyr Zelenskyy: Ukraine's president, who announced the Libya strikes [S13][S17]
+- Finland and Estonia: helped fight the fire and tightened security in the Baltic [S3][S4]
+- Sparta II: the Russian cargo ship hit in the Baltic, on the US sanctions list and linked to the military [S9][S4]
+- US intelligence chief: says Putin is not America's friend in Ukraine [S8][S16]
+WHY IT MATTERS:
+- The war at sea has spread from the Black Sea to the Baltic and the Mediterranean [S13]
+- Strikes near Finland and Estonia bring the fighting close to NATO territory [S12][S11]
+- Shipping insurance in the Baltic could rise (Claude's reading) [S9]
+DISPUTED:
+- Who struck the Baltic ship: one report says Ukrainian drones, others only say drones [S6][S2]
+- Whether the Libya target was a warship or a cargo ship is reported differently [S17][S15]
+WATCH:
+- Russia's response at sea and any talks between Xi, Trump and Putin [S1][S13]
+- A new Polish case says Russia tried to assassinate a Ukrainian rapper [S20]
+TERMS:
+- Sea drone: a small uncrewed boat carrying explosives, steered remotely
+- Mothership: a larger vessel that carries and launches the drones
+""";
+
     public static void run(Check c) throws Exception {
         long now = System.currentTimeMillis();
         c.suite("Explain this subject: choosing articles (AI-F08)");
@@ -115,6 +147,9 @@ public final class P9Test {
                 "an update asks what changed and marks the newer articles");
         c.that(!withPrev.substring(withPrev.indexOf("EARLIER EXPLAINER"), withPrev.indexOf("ARTICLES (oldest")).contains("[S"), "the earlier explainer's citations aren't sent (they'd point at the wrong articles)");
         c.eq("A [S1] and B.", Explainer.clean("A [S1] and B [S40].", sources), "follow-up answers lose citations to articles that weren't sent");
+        String withInterests = Explainer.prompt("Golden Dome", refs, a -> "", Explainer.Level.DETAILED, null, List.of("Redstone Arsenal", "Hypersonic weapons"));
+        c.that(withInterests.contains("The reader follows: Redstone Arsenal; Hypersonic weapons") && withInterests.contains("don't force"), "the reader's topics and watches are given for WHY IT MATTERS");
+        c.that(p.contains("at most 650 words") && q.contains("at most 250 words"), "length limits keep a detailed explainer under 3 minutes");
 
         c.suite("Explain this subject: saving, export, phone (AI-F08)");
         Path dir = Files.createTempDirectory("ld-expl");
@@ -142,6 +177,11 @@ public final class P9Test {
         c.that(page.contains("href='https://dn.com/2'") && page.contains("deeper:TIMELINE:0") && page.contains("simpler:") && page.contains("Articles Claude read"),
                 "the page links each citation, offers 'more' on each point and 'more simply'");
         c.that(page.contains("class='mine'"), "Claude's own reading is set apart");
+        var marked = back.withWeak(Set.of("TIMELINE:1"));
+        es.save(marked);
+        c.eq(Set.of("TIMELINE:1"), ExplainerStore.read(es.file(marked)).weak(), "source-check marks are saved with the explainer");
+        String mpage = com.linkeddesk.ui.TestAccess.explainerHtml(marked);
+        c.that(mpage.contains("⚠ check source") && mpage.contains("Source check: ") && mpage.contains("min read"), "the page shows the source check, marks the point and the reading time");
         var b = new com.linkeddesk.analysis.Briefing(now, new LinkedHashMap<>(), List.of(), List.of(), 0, 0, 0,
                 new com.linkeddesk.analysis.Analyzer.Result(List.of(), List.of(), 0));
         String phone = com.linkeddesk.export.PhonePage.build(b, null, com.linkeddesk.analysis.Regions.defaults(), Map.of(), List.of(), false, List.of(back));
@@ -187,6 +227,22 @@ public final class P9Test {
             }
             store.addAll(real);
             NewsService svc = new NewsService(store, st);
+            // The P9 gate on real news: 20+ articles over 3+ days, and every point traced to its articles.
+            var russia = svc.planExplainer("Russia", null, Explainer.Level.DETAILED);
+            Set<String> rdays = new HashSet<>();
+            for (Article x : russia.refs().values()) rdays.add(java.time.LocalDate.ofInstant(java.time.Instant.ofEpochMilli(x.published), java.time.ZoneId.systemDefault()).toString());
+            c.that(russia.articles() >= 20 && rdays.size() >= 3, "on the real-news sample, a broad subject gathers " + russia.articles() + " articles over " + rdays.size() + " days");
+            var gr = Explainer.parse("Russia", Explainer.Level.DETAILED, now, GROUNDED, Explainer.sources(russia.refs()), 0, List.of());
+            java.util.function.Function<String, String> textOf = id -> { Article x = russia.refs().get(id); return x == null ? "" : x.title + " " + x.summary; };
+            var weak = Explainer.weakPoints(gr, textOf);
+            c.eq(Set.of("WATCH:1"), weak, "source check: of " + gr.citedPoints() + " points written from these articles, only the one citing the wrong article is marked");
+            c.that(gr.readingMinutes() <= 3, "a full explainer reads in under 3 minutes (" + gr.words() + " words, about " + gr.readingMinutes() + " min)");
+            int flagged = 0, total = 0;
+            for (String wrong : List.of("S14", "S1")) {
+                var sw = Explainer.parse("Russia", Explainer.Level.DETAILED, now, GROUNDED.replaceAll("\\[S\\d+\\](\\[S\\d+\\])?", "[" + wrong + "]"), Explainer.sources(russia.refs()), 0, List.of());
+                flagged += Explainer.weakPoints(sw, textOf).size(); total += sw.citedPoints();
+            }
+            c.that(flagged * 100 >= total * 80, "pointing every citation at an unrelated article gets " + flagged + " of " + total + " points marked");
             var plan = svc.planExplainer("Ukraine Russian warship", null, Explainer.Level.DETAILED);
             c.that(plan.articles() >= 5 && plan.articles() <= 25, "the archive is searched for the subject: " + plan.articles() + " articles from " + plan.outlets() + " outlets");
             c.that(plan.refs().values().stream().allMatch(a -> (a.title + " " + a.summary).toLowerCase().matches("(?s).*(ukrain|russia|warship|zelensk|ship).*")), "…and they are about it");
@@ -194,6 +250,7 @@ public final class P9Test {
             c.eq(0, hits.get(), "nothing is sent while planning");
             var res = svc.runExplainer(plan);
             c.that(hits.get() == 1 && res.sections().get("BOTTOM LINE").size() == 1 && res.sections().get("TERMS").size() == 1, "Claude's explainer is read");
+            c.that(res.weak() != null && ExplainerStore.read(svc.explainers().file(res)).weak().equals(res.weak()), "the source check runs on each new explainer and is saved");
             c.eq(1, svc.explainers().all().size(), "and saved");
             c.that(svc.claude().byFeature().containsKey("explainer"), "its cost is logged under Explainers");
             var again = svc.planExplainer("Ukraine Russian warship", null, Explainer.Level.DETAILED);

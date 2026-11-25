@@ -803,10 +803,18 @@ public final class NewsService {
             throw new IllegalStateException("Only " + refs.size() + (refs.size() == 1 ? " article" : " articles") + " about \"" + subject
                     + "\" were found, which isn't enough to piece together. Try broader words, or Search live news first.");
         var previous = explainers().latest(subject);
-        String prompt = com.linkeddesk.ai.Explainer.prompt(subject, refs, full, level, previous);
+        String prompt = com.linkeddesk.ai.Explainer.prompt(subject, refs, full, level, previous, interests());
         var c = claude();
         return new ExplainPlan(subject, level, refs, prompt, c.estimate(prompt, level.maxTokens), c.isCached("explainer", prompt, level.maxTokens),
                 c.spentThisMonth(), c.budget(), previous);
+    }
+
+    /** Your topics and watches (names and search words), so an explainer can say how a subject bears on them. */
+    public List<String> interests() {
+        java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+        try { for (var t : com.linkeddesk.feeds.TopicCatalog.load()) if (!t.paused()) out.add(t.name()); } catch (Exception ignored) { }
+        try { for (var w : watches().all()) out.add(w.name()); } catch (Exception ignored) { }
+        return new ArrayList<>(out);
     }
 
     /** Explainers made in the last 3 days (newest first, one per subject, at most 3), for the phone briefing. */
@@ -824,6 +832,10 @@ public final class NewsService {
         var r = com.linkeddesk.ai.Explainer.parse(plan.subject(), plan.level(), System.currentTimeMillis(), reply,
                 com.linkeddesk.ai.Explainer.sources(plan.refs()), plan.previous() == null ? 0 : plan.previous().created(), List.of());
         if (r.isEmpty()) throw new IllegalStateException("Claude's answer couldn't be read as an explainer; nothing was saved. Try again.");
+        r = r.withWeak(com.linkeddesk.ai.Explainer.weakPoints(r, id -> {
+            Article a = plan.refs().get(id);
+            return a == null ? "" : a.title + " " + a.summary + " " + store.fullText(a);
+        }));
         explainers().save(r);
         return r;
     }

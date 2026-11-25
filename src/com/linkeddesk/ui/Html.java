@@ -345,9 +345,14 @@ final class Html {
         sb.append("<h1>").append(esc(r.subject())).append("</h1><p class='meta'>").append(r.level().label).append(" explainer by Claude · ")
           .append(esc(XWHEN.format(java.time.Instant.ofEpochMilli(r.created())))).append(" · from ").append(r.refs().size()).append(" articles by ")
           .append(r.outlets()).append(" outlets over ").append(r.days()).append(r.days() == 1 ? " day" : " days")
+          .append(" · about ").append(r.readingMinutes()).append(" min read")
           .append(r.previousCreated() > 0 ? " · updates the one from " + esc(XWHEN.format(java.time.Instant.ofEpochMilli(r.previousCreated()))) : "")
           .append("<br>Written from these articles only; each point links to its sources. Points marked <i>(Claude's reading)</i> are its interpretation, not reported fact.")
-          .append(budget == null || budget.isBlank() ? "" : " " + esc(budget)).append("</p>");
+          .append(budget == null || budget.isBlank() ? "" : " " + esc(budget));
+        int pts = r.citedPoints();
+        if (pts > 0) sb.append("<br>Source check: ").append(pts - r.weak().size()).append(" of ").append(pts)
+                .append(" points share key words with the articles they cite").append(r.weak().isEmpty() ? "." : "; " + r.weak().size() + " marked ⚠ to check.");
+        sb.append("</p>");
         sb.append("<p class='act'><a href='simpler:'>Explain it more simply</a> · <a href='update:'>Update with the latest news</a>")
           .append(" · <a href='detailed:'>").append(r.level() == com.linkeddesk.ai.Explainer.Level.QUICK ? "Detailed version" : "Quick version").append("</a>")
           .append(" · <a href='copy:'>Copy</a> · <a href='export:'>Export…</a> · <a href='delete:'>Delete</a></p>");
@@ -362,8 +367,10 @@ final class Html {
             var lines = r.sections().get(s);
             if (lines.isEmpty()) continue;
             sb.append("<h2>").append(esc(com.linkeddesk.ai.Explainer.TITLES.get(s))).append("</h2>");
+            java.util.function.IntFunction<String> flag = i -> r.weak().contains(s + ":" + i)
+                    ? " <span class='warn'>⚠ check source</span>" : "";
             if (s.equals("BOTTOM LINE")) {
-                for (String l : lines) sb.append("<p class='bl'>").append(cite.apply(l)).append("</p>");
+                for (int i = 0; i < lines.size(); i++) sb.append("<p class='bl'>").append(cite.apply(lines.get(i))).append(flag.apply(i)).append("</p>");
                 continue;
             }
             sb.append("<ul>");
@@ -374,10 +381,10 @@ final class Html {
                     sb.append("<li>").append(c > 0 && c < 50 ? "<b>" + esc(l.substring(0, c)) + "</b>" + cite.apply(l.substring(c)) : cite.apply(l)).append("</li>");
                 } else if (s.equals("TIMELINE") || s.equals("WHO")) {
                     int c = l.indexOf(':');
-                    sb.append("<li>").append(c > 0 && c < 40 ? "<b>" + esc(l.substring(0, c)) + "</b>" + cite.apply(l.substring(c)) : cite.apply(l));
+                    sb.append("<li>").append(c > 0 && c < 40 ? "<b>" + esc(l.substring(0, c)) + "</b>" + cite.apply(l.substring(c)) : cite.apply(l)).append(flag.apply(i));
                     sb.append(" <a class='more' href='deeper:").append(s.replace(' ', '_')).append(':').append(i).append("'>more ›</a></li>");
                 } else {
-                    sb.append("<li>").append(cite.apply(l)).append(" <a class='more' href='deeper:").append(s.replace(' ', '_')).append(':').append(i).append("'>more ›</a></li>");
+                    sb.append("<li>").append(cite.apply(l)).append(flag.apply(i)).append(" <a class='more' href='deeper:").append(s.replace(' ', '_')).append(':').append(i).append("'>more ›</a></li>");
                 }
             }
             sb.append("</ul>");

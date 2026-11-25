@@ -48,14 +48,36 @@ public final class Explainer {
     public record FollowUp(String label, String text) {}
 
     public record Result(String subject, Level level, long created, Map<String, Source> refs, Map<String, List<String>> sections,
-                         List<String> problems, Set<String> cited, String raw, long previousCreated, List<FollowUp> followUps) {
+                         List<String> problems, Set<String> cited, String raw, long previousCreated, List<FollowUp> followUps, Set<String> weak) {
+        public Result(String subject, Level level, long created, Map<String, Source> refs, Map<String, List<String>> sections,
+                      List<String> problems, Set<String> cited, String raw, long previousCreated, List<FollowUp> followUps) {
+            this(subject, level, created, refs, sections, problems, cited, raw, previousCreated, followUps, Set.of());
+        }
         public String key() { return Explainer.key(subject); }
+        /** Points whose citations were checked ("SECTION:i"), or none if not checked. */
+        public Result withWeak(Set<String> w) {
+            return new Result(subject, level, created, refs, sections, problems, cited, raw, previousCreated, followUps, Set.copyOf(w));
+        }
+        /** Points that cite sources (the ones the source check looks at). */
+        public int citedPoints() {
+            int n = 0;
+            for (var e : sections.entrySet()) if (!e.getKey().equals("TERMS")) for (String l : e.getValue()) if (TAG.matcher(l).find()) n++;
+            return n;
+        }
+        /** Words in the explainer (sections only, citations left out). */
+        public int words() {
+            int n = 0;
+            for (List<String> l : sections.values()) for (String x : l) { String t = TAG.matcher(x).replaceAll(" ").strip(); if (!t.isEmpty()) n += t.split("\\s+").length; }
+            return n;
+        }
+        /** Minutes to read at about 230 words a minute (at least 1). */
+        public int readingMinutes() { return Math.max(1, (int) Math.ceil(words() / 230.0)); }
         public boolean isEmpty() { return sections.values().stream().allMatch(List::isEmpty); }
         public int outlets() { Set<String> s = new HashSet<>(); for (Source r : refs.values()) s.add(r.source()); return s.size(); }
         public int days() { Set<String> s = new HashSet<>(); for (Source r : refs.values()) s.add(r.day()); return s.size(); }
         public Result withFollowUp(FollowUp f) {
             List<FollowUp> l = new ArrayList<>(followUps); l.add(f);
-            return new Result(subject, level, created, refs, sections, problems, cited, raw, previousCreated, List.copyOf(l));
+            return new Result(subject, level, created, refs, sections, problems, cited, raw, previousCreated, List.copyOf(l), weak);
         }
     }
 
@@ -111,6 +133,11 @@ public final class Explainer {
     }
 
     public static String prompt(String subject, Map<String, Article> refs, Function<Article, String> fullText, Level level, Result previous) {
+        return prompt(subject, refs, fullText, level, previous, List.of());
+    }
+
+    /** {@code interests}: the reader's topics and watches, so WHY IT MATTERS can say how it bears on them. */
+    public static String prompt(String subject, Map<String, Article> refs, Function<Article, String> fullText, Level level, Result previous, List<String> interests) {
         boolean quick = level == Level.QUICK;
         StringBuilder sb = new StringBuilder();
         sb.append("Explain this subject to a busy, intelligent reader who hasn't followed it: ").append(subject).append("\n\n")
@@ -119,8 +146,12 @@ public final class Explainer {
           .append(previous != null ? "CHANGED, " : "").append("TIMELINE, WHO and DISPUTED must cite at least one article. ")
           .append("Keep what the reports say apart from your own reading: if a point in WHY IT MATTERS or WATCH is your own reading, ")
           .append("end it with \"(Claude's reading)\". Pieces marked OPINION are commentary: attribute them (\"a columnist argues…\"), never state them as fact. ")
-          .append("Do not take sides; where sources disagree, say who says what.\n\n")
-          .append("Reply in exactly this form").append(quick ? ", keeping it to one screen (about 250 words)" : " (about 600-900 words)").append(":\n")
+          .append("Do not take sides; where sources disagree, say who says what.\n");
+        if (interests != null && !interests.isEmpty())
+            sb.append("The reader follows: ").append(String.join("; ", interests.subList(0, Math.min(12, interests.size()))))
+              .append(". In WHY IT MATTERS, say how this bears on those where the articles support it; don't force a connection.\n");
+        sb.append("\n")
+          .append("Reply in exactly this form").append(quick ? ", keeping it to one screen (at most 250 words)" : " (at most 650 words, so it reads in under 3 minutes)").append(":\n")
           .append("BOTTOM LINE:\n- 2-3 sentences on what this is and where it stands now [S1]\n");
         if (previous != null) sb.append("CHANGED:\n- what is new or different since the earlier explainer below (if nothing, say so) [S4]\n");
         sb.append("TIMELINE:\n- Mon D: what happened, oldest first").append(quick ? " (up to 5 entries)" : "").append(" [S2]\n")
@@ -224,6 +255,63 @@ public final class Explainer {
             sb.append('\n');
         }
         return sb.toString();
+    }
+
+    // ------------------------------------------------------------------ source check
+
+    private static final Set<String> MONTHS = Set.of("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "sept", "oct", "nov", "dec",
+            "january", "february", "march", "april", "june", "july", "august", "september", "october", "november", "december",
+            "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "says", "said", "claude", "reading", "reported", "reports");
+
+    /** The content words of a text: lower case, 4+ letters (or any number), not common words, simply stemmed. */
+    static Set<String> content(String text) {
+        Set<String> out = new HashSet<>();
+        String t = Normalizer.normalize(text == null ? "" : text, Normalizer.Form.NFD).replaceAll("\\p{M}", "").toLowerCase(Locale.ROOT);
+        for (String w : t.split("[^\\p{L}\\p{N}]+")) {
+            if (w.isEmpty()) continue;
+            boolean num = w.chars().allMatch(Character::isDigit);
+            if (!num && (w.length() < 4 || com.linkeddesk.analysis.Text.STOP.contains(w) || MONTHS.contains(w))) continue;
+            if (num && w.length() < 2) continue;
+            out.add(stem(w));
+        }
+        return out;
+    }
+
+    private static String stem(String w) {
+        if (w.length() > 6 && w.endsWith("ing")) return w.substring(0, w.length() - 3);
+        if (w.length() > 5 && w.endsWith("ed")) return w.substring(0, w.length() - 2);
+        if (w.length() > 5 && w.endsWith("ies")) return w.substring(0, w.length() - 3) + "y";
+        if (w.length() > 4 && w.endsWith("s") && !w.endsWith("ss")) return w.substring(0, w.length() - 1);
+        return w;
+    }
+
+    /**
+     * Source check: for each point that cites articles (terms aside), does it share enough key words with the
+     * articles it cites? A point that doesn't is returned as "SECTION:i" so it can be marked "check source".
+     * It catches a citation pointing at the wrong article, not subtle misreadings, so the spot check still matters.
+     */
+    public static Set<String> weakPoints(Result r, Function<String, String> textOfRef) {
+        Set<String> weak = new LinkedHashSet<>();
+        for (var e : r.sections().entrySet()) {
+            if (e.getKey().equals("TERMS")) continue;
+            List<String> lines = e.getValue();
+            for (int i = 0; i < lines.size(); i++) {
+                String l = lines.get(i);
+                Matcher m = TAG.matcher(l);
+                StringBuilder src = new StringBuilder();
+                boolean any = false;
+                while (m.find()) { any = true; src.append(' ').append(textOfRef.apply("S" + m.group(1))); }
+                if (!any) continue;
+                Set<String> point = content(TAG.matcher(l).replaceAll(" ").replace("(Claude's reading)", " "));
+                if (point.isEmpty()) continue;
+                Set<String> have = content(src.toString());
+                int shared = 0;
+                for (String w : point) if (have.contains(w)) shared++;
+                boolean ok = point.size() <= 3 ? shared >= 1 : shared >= 2 && shared >= Math.ceil(point.size() * 0.25);
+                if (!ok) weak.add(e.getKey() + ":" + i);
+            }
+        }
+        return weak;
     }
 
     /** Removes citations to articles that weren't sent from a follow-up answer. */
