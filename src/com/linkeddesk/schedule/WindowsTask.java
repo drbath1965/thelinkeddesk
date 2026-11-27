@@ -32,9 +32,12 @@ public final class WindowsTask {
         return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
     }
 
-    public static String install(LocalTime time) throws Exception {
+    public static String install(LocalTime time) throws Exception { return install(time, 0); }
+
+    /** Daily at {@code time}, and also every {@code everyHours} hours through the day when that's above 0 (FET-F10). */
+    public static String install(LocalTime time, int everyHours) throws Exception {
         Action a = currentAction();
-        return install(time, a, userId(), "schtasks");
+        return install(time, a, userId(), "schtasks", everyHours);
     }
 
     /** What the task runs: a program, its arguments and the folder to run in. */
@@ -67,9 +70,13 @@ public final class WindowsTask {
 
     /** Testable core: writes the task XML and registers it with the given schtasks command. */
     static String install(LocalTime time, Action action, String userId, String schtasks) throws Exception {
+        return install(time, action, userId, schtasks, 0);
+    }
+
+    static String install(LocalTime time, Action action, String userId, String schtasks, int everyHours) throws Exception {
         Path xml = Files.createTempFile("linkeddesk-task", ".xml");
         try {
-            writeUtf16(xml, taskXml(time, action, userId, LocalDate.now()));
+            writeUtf16(xml, taskXml(time, action, userId, LocalDate.now(), everyHours));
             return run(List.of(schtasks, "/Create", "/F", "/TN", TASK_NAME, "/XML", xml.toString()));
         } finally {
             Files.deleteIfExists(xml);
@@ -156,6 +163,26 @@ public final class WindowsTask {
     }
 
     static String taskXml(LocalTime time, Action action, String userId, LocalDate startDay) {
+        return taskXml(time, action, userId, startDay, 0);
+    }
+
+    /** Every N hours: a Repetition inside the daily trigger, lasting the day, so it starts again each morning. */
+    static String taskXml(LocalTime time, Action action, String userId, LocalDate startDay, int everyHours) {
+        String xml = taskXmlDaily(time, action, userId, startDay);
+        if (everyHours <= 0 || everyHours >= 24) return xml;
+        return xml.replace("<ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay>",
+                "<Repetition><Interval>PT" + everyHours + "H</Interval><Duration>P1D</Duration><StopAtDurationEnd>false</StopAtDurationEnd></Repetition>\n"
+                        + "          <ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay>")
+                .replace("every day.</Description>", "every day, and every " + everyHours + (everyHours == 1 ? " hour" : " hours") + ".</Description>");
+    }
+
+    /** Reads the repeat interval back from a task's XML (0 = once a day). */
+    static int everyHoursIn(String xml) {
+        var m = java.util.regex.Pattern.compile("<Interval>PT(\\d+)H</Interval>").matcher(xml == null ? "" : xml);
+        return m.find() ? Integer.parseInt(m.group(1)) : 0;
+    }
+
+    private static String taskXmlDaily(LocalTime time, Action action, String userId, LocalDate startDay) {
         String start = startDay + "T" + String.format("%02d:%02d:00", time.getHour(), time.getMinute());
         String user = userId == null || userId.isBlank() ? "" : "      <UserId>" + x(userId) + "</UserId>\n";
         return """

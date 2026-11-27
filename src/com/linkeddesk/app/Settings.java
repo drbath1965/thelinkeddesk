@@ -152,6 +152,38 @@ public final class Settings {
     }
     public synchronized void setConnectionsDaily(int n) { p.setProperty("connectionsDaily", Integer.toString(Math.max(0, Math.min(20, n)))); }
 
+    // ---- How much news is downloaded (FET-F10)
+    public synchronized String downloadVolume() { return p.getProperty("downloadVolume", "STANDARD").trim(); }
+    public synchronized void setDownloadVolume(String v) { p.setProperty("downloadVolume", v == null ? "STANDARD" : v.trim()); }
+    private int intProp(String k, int def, int lo, int hi) {
+        try { return Math.max(lo, Math.min(hi, Integer.parseInt(p.getProperty(k, Integer.toString(def)).trim()))); } catch (NumberFormatException e) { return def; }
+    }
+    /** Custom: download every N hours as well as daily (0 = once a day). */
+    public synchronized int downloadEveryHours() { return intProp("downloadEveryHours", 0, 0, 24); }
+    public synchronized void setDownloadEveryHours(int h) { p.setProperty("downloadEveryHours", Integer.toString(h)); }
+    /** Custom: at most N new articles per feed per download (0 = no limit). */
+    public synchronized int maxPerFeed() { return intProp("maxPerFeed", 0, 0, 1000); }
+    public synchronized void setMaxPerFeed(int n) { p.setProperty("maxPerFeed", Integer.toString(n)); }
+    /** Custom: at most N new articles a day (0 = no limit). */
+    public synchronized int maxPerDay() { return intProp("maxPerDay", 0, 0, 1_000_000); }
+    public synchronized void setMaxPerDay(int n) { p.setProperty("maxPerDay", Integer.toString(n)); }
+    /** Custom: Google News editions searched per topic: 1 = one, 2 = + UK, 3 = + India, Australia, Canada. */
+    public synchronized int topicDepth() { return intProp("topicDepth", 1, 1, 3); }
+    public synchronized void setTopicDepth(int d) { p.setProperty("topicDepth", Integer.toString(d)); }
+    /** New articles kept on {@link #countedDay()} so far (for the daily limit). */
+    public synchronized int countedToday() { return intProp("countedToday", 0, 0, Integer.MAX_VALUE); }
+    public synchronized java.time.LocalDate countedDay() {
+        try { return java.time.LocalDate.parse(p.getProperty("countedDay", "2000-01-01")); } catch (RuntimeException e) { return java.time.LocalDate.of(2000, 1, 1); }
+    }
+    public synchronized void setCounted(java.time.LocalDate day, int n) { p.setProperty("countedDay", day.toString()); p.setProperty("countedToday", Integer.toString(n)); }
+    /** Fill in the missed days automatically after the PC was off for a day or more (FET-F12). On by default. */
+    public synchronized boolean fillInAuto() { return Boolean.parseBoolean(p.getProperty("fillInAuto", "true")); }
+    public synchronized void setFillInAuto(boolean b) { p.setProperty("fillInAuto", Boolean.toString(b)); }
+
+    /** The day the once-a-day extras (Claude digest, email) last ran, so downloading every few hours doesn't repeat them. */
+    public synchronized String dailyExtrasDay() { return p.getProperty("dailyExtrasDay", ""); }
+    public synchronized void setDailyExtrasDay(String d) { p.setProperty("dailyExtrasDay", d); }
+
     /** Read aloud (UI-F20): the voice (blank = the computer's default) and speed (-5 slow … 5 fast). */
     public synchronized String speechVoice() { return p.getProperty("speechVoice", "").trim(); }
     public synchronized void setSpeechVoice(String v) { p.setProperty("speechVoice", v == null ? "" : v.trim()); }

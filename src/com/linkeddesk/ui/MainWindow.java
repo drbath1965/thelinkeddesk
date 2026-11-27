@@ -97,6 +97,7 @@ public final class MainWindow extends JFrame implements Host {
 
     public MainWindow(NewsService service) {
         super("The Linked Desk " + com.linkeddesk.app.AppPaths.VERSION + " — world news, linked");
+        Html.filledIn = service::isFilledIn;
         this.service = service;
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         // Fit the screen (also at 150-200% Windows scaling, where the usable area in Java pixels is smaller).
@@ -270,6 +271,9 @@ public final class MainWindow extends JFrame implements Host {
             if (n != null && !n.isBlank()) showEntity(n.strip());
         }));
         news.addSeparator();
+        news.add(item("How much news…", 0, e -> new DownloadsDialog(this, service).setVisible(true)));
+        news.add(item("Feed packs…", 0, e -> openPacks()));
+        news.add(item("Fill in past days…", 0, e -> openFillIn()));
         news.add(item("Test all feeds", 0, e -> { openHealth(); }));
         news.add(item("Feed health…", 0, e -> openHealth()));
         news.addSeparator();
@@ -486,14 +490,43 @@ public final class MainWindow extends JFrame implements Host {
         }.execute();
     }
 
+    /** Fill in past days (FET-F12). */
+    private void openFillIn() {
+        if (downloading.get()) { status.setText("A download is running; try again when it's done."); return; }
+        FillInDialog d = new FillInDialog(this, service);
+        d.setVisible(true);
+        if (d.chosenDays == null) return;
+        var days = d.chosenDays; var ts = d.chosenTopics; var ds = d.chosenDesks;
+        runDownload("Filling in past days…", (progress, cancelled) -> service.fillIn(days, ts, ds, progress, cancelled), r -> {
+            analyze(null);
+            briefing.reload();
+            status.setText("Filled in " + days.size() + " days: " + r.summary());
+        });
+    }
+
+    /** Feed packs (FET-F11); feeds just added are downloaded straight away. */
+    private void openPacks() {
+        FeedPacksDialog d = new FeedPacksDialog(this, service);
+        d.setVisible(true);
+        if (!d.changed) return;
+        if (d.justAdded.isEmpty() || downloading.get()) { analyze(null); return; }
+        List<com.linkeddesk.feeds.FeedSource> feeds = List.copyOf(d.justAdded);
+        runDownload("Downloading the new feeds…", (progress, cancelled) -> service.fetchFeeds(feeds, "feed pack", progress, cancelled), r -> {
+            analyze(null);
+            briefing.reload();
+            status.setText("New feeds: " + r.summary());
+        });
+    }
+
     private void fetch() { fetch(false); }
 
     /** The daily download (timer or start-up): afterwards the briefing opens, if you want it to. */
     private void fetchDaily() { fetch(true); }
 
-    private void fetch(boolean daily) {
+    private void fetch(boolean scheduled) {
         if (downloading.get()) return;
         runDownload("Downloading news…", (progress, cancelled) -> service.fetchNow(progress, cancelled), r -> {
+            boolean daily = scheduled && !r.cancelled && service.claimDailyExtras();   // first download of the day only
             topics.reload(null);
             if (healthDialog != null && healthDialog.isShowing()) healthDialog.reload();
             analyze(null);
@@ -504,6 +537,7 @@ public final class MainWindow extends JFrame implements Host {
             watchPanel.reload();
             markets.reload();
             afterDownload(r, daily);
+            if (r.dailyLimitReached) status.setText(r.summary());
         });
     }
 

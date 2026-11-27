@@ -190,6 +190,8 @@ final class Html {
 
     /** Whether Claude features are available (an API key is saved); without one, Claude links aren't shown (UI-F15). */
     static volatile boolean claudeOn = true;
+    /** Marks articles added by filling in past days (FET-F12); set by the main window. */
+    static volatile java.util.function.Predicate<String> filledIn = id -> false;
     private static final java.util.List<javax.swing.JComponent> CLAUDE_ONLY = new java.util.concurrent.CopyOnWriteArrayList<>();
 
     /** Registers a button that only makes sense with Claude: hidden while there's no API key. */
@@ -321,7 +323,8 @@ final class Html {
               .append("<span class='meta'>").append(esc(a.source)).append(a.kindLabel().isEmpty() ? "" : " · " + a.kindLabel())
               .append(com.linkeddesk.analysis.Coverage.opinion(a) ? " · <b>Opinion / analysis</b>" : "")
               .append(copyOf(c, a))
-              .append(" · ").append(WHEN.format(Instant.ofEpochMilli(a.published))).append("</span>");
+              .append(" · ").append(WHEN.format(Instant.ofEpochMilli(a.published)))
+              .append(filledIn.test(a.id) ? " · <i>filled in</i>" : "").append("</span>");
             if (!a.originalTitle.isEmpty())
                 sb.append("<br><span class='terms'>Translated from ").append(esc(com.linkeddesk.analysis.Language.name(a.lang))).append(" · original: ")
                   .append(esc(a.originalTitle)).append("</span>");

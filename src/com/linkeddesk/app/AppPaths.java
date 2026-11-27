@@ -23,7 +23,7 @@ public final class AppPaths {
     }
 
     /** The version shown in the title bar and written into backups. */
-    public static final String VERSION = "1.12.0";
+    public static final String VERSION = "1.13.0";
 
     public static Path dataDir() { return home().resolve("data"); }
     public static Path feedsFile() { return home().resolve("feeds.txt"); }

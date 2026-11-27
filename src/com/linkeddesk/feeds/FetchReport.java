@@ -18,6 +18,12 @@ public final class FetchReport {
     public final List<com.linkeddesk.model.Article> addedArticles = new ArrayList<>();
     public boolean cancelled;
     public int expected;
+    /** New articles left out by the download limits (FET-F10), and whether today's limit was reached. */
+    public int skippedByLimit;
+    public boolean dailyLimitReached;
+    public int dailyLimit;
+    /** Articles added by filling in missed days after this download (FET-F12), and how many days. */
+    public int filledIn, filledDays;
 
     public synchronized void add(FeedResult r) { results.add(r); }
 
@@ -32,6 +38,10 @@ public final class FetchReport {
                 checked, totalItems(), totalAdded, failures()));
         if (unchanged() > 0) sb.append(", ").append(unchanged()).append(" unchanged");
         if (paused() > 0) sb.append(", ").append(paused()).append(" paused");
+        if (filledDays > 0) sb.append(" — filled in ").append(filledDays).append(filledDays == 1 ? " missed day: " : " missed days: ").append(filledIn).append(" more articles");
+        if (dailyLimitReached) sb.append(" — today's limit of ").append(dailyLimit).append(" new articles was reached; ")
+                .append(skippedByLimit).append(" skipped (change it in Settings > Downloads)");
+        else if (skippedByLimit > 0) sb.append(", ").append(skippedByLimit).append(" left out by the per-feed limit");
         if (cancelled) sb.append(" — cancelled, ").append(results.stream().filter(r -> "Cancelled".equals(r.error())).count() + Math.max(0, expected - results.size()))
                 .append(" feeds not downloaded");
         return sb.toString();

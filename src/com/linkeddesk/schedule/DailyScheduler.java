@@ -55,7 +55,8 @@ public final class DailyScheduler {
             settings.reload();
             Instant now = clock.instant();
             if (isDue(now, clock.getZone(), settings.dailyEnabled(), settings.dailyTime(),
-                    Instant.ofEpochMilli(settings.lastFetch()), lastAttempt)) {
+                    Instant.ofEpochMilli(settings.lastFetch()), lastAttempt,
+                    com.linkeddesk.feeds.DownloadVolume.of(settings).everyHours())) {
                 lastAttempt = now;
                 fetch.run();
             }
@@ -67,7 +68,15 @@ public final class DailyScheduler {
     /** Pure decision rule, so it can be tested for any date, time and history. */
     public static boolean isDue(Instant now, ZoneId zone, boolean enabled, LocalTime dailyTime,
                                 Instant lastFetch, Instant lastAttempt) {
+        return isDue(now, zone, enabled, dailyTime, lastFetch, lastAttempt, 0);
+    }
+
+    /** As above, and also due once the last download is {@code everyHours} old (when above 0; FET-F10). */
+    public static boolean isDue(Instant now, ZoneId zone, boolean enabled, LocalTime dailyTime,
+                                Instant lastFetch, Instant lastAttempt, int everyHours) {
         if (!enabled) return false;
+        if (everyHours > 0 && Duration.between(lastAttempt, now).compareTo(Duration.ofMinutes(Math.min(30, everyHours * 30L))) >= 0
+                && Duration.between(lastFetch, now).compareTo(Duration.ofHours(everyHours).minusMinutes(2)) >= 0) return true;
         if (Duration.between(lastAttempt, now).compareTo(RETRY_AFTER) < 0) return false;
         LocalDateTime local = LocalDateTime.ofInstant(now, zone);
         boolean doneToday = !LocalDateTime.ofInstant(lastFetch, zone).toLocalDate().isBefore(local.toLocalDate());

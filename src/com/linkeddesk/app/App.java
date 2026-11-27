@@ -36,9 +36,12 @@ public final class App {
                 System.out.println(r.detail());
                 // The daily task also has Claude write the digest and check the day's links (if switched on),
                 // so they are ready when you open the app.
-                String claude = service.dailyClaude();
-                Logs.run("claude", claude, "", 0);
-                System.out.println(claude);
+                // Only after the first download of the day when downloading every few hours (FET-F10).
+                if (service.claimDailyExtras()) {
+                    String claude = service.dailyClaude();
+                    Logs.run("claude", claude, "", 0);
+                    System.out.println(claude);
+                }
                 // Watchlist notification (the app may be closed; the icon appears just long enough to show it).
                 try {
                     var shown = service.notifyAfterDownload(r, com.linkeddesk.alerts.Tray.brief());

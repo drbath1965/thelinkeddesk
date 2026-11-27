@@ -429,9 +429,10 @@ final class SettingsDialog extends JDialog {
         LocalTime t = parsedTime();
         if (t == null) { JOptionPane.showMessageDialog(this, "Enter a valid time first (HH:MM)."); return; }
         try {
-            WindowsTask.install(t);
+            int every = com.linkeddesk.feeds.DownloadVolume.of(settings).everyHours();
+            WindowsTask.install(t, every);
             JOptionPane.showMessageDialog(this, "Done. Windows will download the news every day at " + t
-                    + ".\nYou can see it in Task Scheduler as \"" + WindowsTask.TASK_NAME + "\".");
+                    + (every > 0 ? " and every " + every + (every == 1 ? " hour" : " hours") + " after that" : "") + ".\nYou can see it in Task Scheduler as \"" + WindowsTask.TASK_NAME + "\".");
         } catch (Exception ex) { error(ex); }
     }
 

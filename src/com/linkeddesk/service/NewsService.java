@@ -128,8 +128,24 @@ public final class NewsService {
     /** Daily download: every regular feed and every active topic; paused feeds are skipped. */
     public FetchReport fetchNow(Consumer<String> progress, BooleanSupplier cancelled) throws IOException {
         List<FeedSource> feeds = new ArrayList<>(FeedCatalog.load());
-        for (Topic t : TopicCatalog.load()) if (!t.paused()) feeds.addAll(t.feeds());
-        return download(feeds, false, "download", progress, cancelled, null);
+        int depth = com.linkeddesk.feeds.DownloadVolume.of(settings).topicDepth();
+        for (Topic t : TopicCatalog.load()) if (!t.paused()) feeds.addAll(t.feeds(depth));
+        settings.reload();
+        long before = settings.lastFetch();
+        FetchReport r = download(feeds, false, "download", progress, cancelled, null);
+        // The PC was off for a day or more: fill in the whole days missed (FET-F12).
+        if (!r.cancelled && settings.fillInAuto() && before > 0) {
+            java.time.ZoneId z = java.time.ZoneId.systemDefault();
+            List<java.time.LocalDate> missed = com.linkeddesk.feeds.FillIn.missedDays(
+                    java.time.Instant.ofEpochMilli(before).atZone(z).toLocalDate(), java.time.LocalDate.now(z), com.linkeddesk.feeds.FillIn.AUTO_DAYS);
+            if (!missed.isEmpty()) {
+                try {
+                    FetchReport f = fillIn(missed, activeTopics(), java.util.EnumSet.allOf(Category.class), progress, cancelled);
+                    synchronized (r) { r.filledIn = f.totalAdded; r.filledDays = missed.size(); r.addedArticles.addAll(f.addedArticles); r.totalAdded += f.totalAdded; }
+                } catch (BusyException ignored) { /* can't happen: the download lock is free again */ }
+            }
+        }
+        return r;
     }
 
     /** "Test all feeds": tries every feed now, paused ones included. */
@@ -169,6 +185,9 @@ public final class NewsService {
         long now = System.currentTimeMillis();
         FetchReport report = new FetchReport();
         store.reloadIfChanged();
+        // Filling in past days uses one-off dated searches: they don't belong in feed health (FET-F12).
+        boolean fillIn = who.startsWith("fill in");
+        FeedHealth health = fillIn ? new FeedHealth(AppPaths.home().resolve(".fill-in-scratch.tsv")) : this.health;
         List<FeedSource> due = new ArrayList<>();
         for (FeedSource f : feeds) {
             if (includePaused || health.isDue(f, now)) due.add(f);
@@ -177,45 +196,69 @@ public final class NewsService {
         report.expected = feeds.size();
         settings.reload();
         boolean keepFull = settings.keepFullText();
+        // Limits apply to scheduled and manual downloads, not to tests, topic previews or searches (FET-F10).
+        com.linkeddesk.feeds.DownloadVolume.Plan plan = com.linkeddesk.feeds.DownloadVolume.of(settings);
+        boolean limited = who.equals("download");
+        int perFeed = limited ? plan.maxPerFeed() : 0;
+        java.time.LocalDate today = java.time.LocalDate.now();
+        int budget = limited ? com.linkeddesk.feeds.DownloadVolume.remainingToday(plan, settings.countedDay(), settings.countedToday(), today) : Integer.MAX_VALUE;
+        boolean holdBack = budget != Integer.MAX_VALUE;      // a daily limit: collect first, then keep the most important
+        List<FeedFetcher.FeedItems> held = new ArrayList<>();
         int[] done = {0};
         fetcher.fetchAll(due, health, fetched -> {
             FeedFetcher.FeedItems fi = fetched;
             synchronized (report) {
-                int added = 0;
                 if (fi.ok() && fi.feed().filter() != null) {          // apply -excluded words (Bing ignores them)
                     SearchQuery f = new SearchQuery(fi.feed().filter());
                     List<Article> kept = fi.items().stream().filter(a -> !f.excluded(a)).toList();
                     fi = new FeedFetcher.FeedItems(fi.feed(), kept, fi.error(), fi.notModified(), fi.etag(), fi.lastModified(), fi.attempts());
                 }
-                try {
-                    if (fi.ok()) {
-                        List<Article> items = fi.items();
-                        if (!keepFull) items = items.stream().map(x -> x.fullText.isEmpty() ? x
-                                : new Article(x.id, x.url, x.title, x.summary, x.source, x.feedCategory, x.published, x.fetched, x.kind, "")).toList();
-                        List<Article> newOnes = store.addAll(items);
-                        added = newOnes.size();
-                        report.addedArticles.addAll(newOnes);
-                        if (foundIds != null) foundIds.accept(fi.items().stream().map(store::canonicalId).toList());
-                        if (fi.feed().isTopic()) {
-                            List<String> canon = fi.items().stream().map(store::canonicalId).toList();
-                            topicHits.add(fi.feed().topic(), canon, System.currentTimeMillis());
-                        }
-                        health.recordSuccess(fi.feed(), added, fi.notModified(), fi.etag(), fi.lastModified(), System.currentTimeMillis());
-                    } else if (!"Cancelled".equals(fi.error())) {
-                        health.recordFailure(fi.feed(), fi.error(), System.currentTimeMillis());
-                    }
-                } catch (IOException e) {
-                    Logs.error("Saving articles from " + fi.feed().name(), e);
+                if (fi.ok()) health.recordListing(fi.feed(), fi.items(), System.currentTimeMillis());
+                if (fi.ok() && perFeed > 0) {
+                    List<Article> trimmed = com.linkeddesk.feeds.DownloadVolume.limitPerFeed(fi.items(), store::isNew, perFeed);
+                    report.skippedByLimit += fi.items().size() - trimmed.size();
+                    fi = new FeedFetcher.FeedItems(fi.feed(), trimmed, fi.error(), fi.notModified(), fi.etag(), fi.lastModified(), fi.attempts());
                 }
-                report.totalAdded += added;
-                report.add(new FetchReport.FeedResult(fi.feed(), fi.items().size(), added, fi.error(), fi.notModified(), false, fi.attempts()));
                 done[0]++;
+                if (holdBack && fi.ok()) held.add(fi);
+                else saveFeed(fi, keepFull, report, foundIds, health);
                 if (progress != null) progress.accept("Downloaded " + done[0] + " of " + due.size() + " feeds (" + report.totalAdded + " new articles)");
             }
         }, cancelled);
+        if (holdBack) {
+            int[] counts = new int[held.size()];
+            double[] prio = new double[held.size()];
+            for (int i = 0; i < held.size(); i++) {
+                List<Article> items = held.get(i).items();
+                counts[i] = (int) items.stream().filter(store::isNew).count();
+                prio[i] = feedPriority(held.get(i).feed(), items);
+            }
+            int[] allow = com.linkeddesk.feeds.DownloadVolume.allocate(counts, prio, budget);
+            int kept = 0;
+            for (int i = 0; i < held.size(); i++) {
+                FeedFetcher.FeedItems fi = held.get(i);
+                if (allow[i] < counts[i]) {
+                    List<Article> trimmed = com.linkeddesk.feeds.DownloadVolume.limitPerFeed(fi.items(), store::isNew, Math.max(allow[i], 0));
+                    if (allow[i] == 0) trimmed = fi.items().stream().filter(a -> !store.isNew(a)).toList();
+                    report.skippedByLimit += counts[i] - allow[i];
+                    report.dailyLimitReached = true;
+                    fi = new FeedFetcher.FeedItems(fi.feed(), trimmed, fi.error(), fi.notModified(), fi.etag(), fi.lastModified(), fi.attempts());
+                }
+                saveFeed(fi, keepFull, report, foundIds, health);
+                kept += allow[i];
+            }
+            report.dailyLimit = plan.maxPerDay();
+            if (budget == 0 && counts.length > 0 && java.util.Arrays.stream(counts).sum() > 0) report.dailyLimitReached = true;
+        }
+        if (limited) {
+            settings.reload();
+            int before = today.equals(settings.countedDay()) ? settings.countedToday() : 0;
+            settings.setCounted(today, before + report.totalAdded);
+            settings.save();
+        }
         report.cancelled = cancelled.getAsBoolean();
         report.finished = java.time.Instant.now();
-        try { health.save(); } catch (IOException e) { Logs.error("Saving feed health", e); }
+        if (!fillIn) try { health.save(); } catch (IOException e) { Logs.error("Saving feed health", e); }
         if (!report.cancelled && who.equals("download")) {
             settings.reload();
             settings.setLastFetch(System.currentTimeMillis());
@@ -223,6 +266,160 @@ public final class NewsService {
         }
         Logs.run(who, report.summary(), report.detail(), (System.nanoTime() - t0) / 1e9);
         return report;
+    }
+
+    private final com.linkeddesk.store.FilledIn filledIn = new com.linkeddesk.store.FilledIn();
+
+    /** Articles added by filling in past days (marked "filled in"). */
+    public boolean isFilledIn(String id) { return filledIn.contains(id); }
+
+    public List<Topic> activeTopics() { return TopicCatalog.load().stream().filter(t -> !t.paused()).toList(); }
+
+    /**
+     * Fills in past days (FET-F12): one Google News search per topic and desk for each day, limited to that day.
+     * Articles already saved are skipped as usual; new ones are marked "filled in".
+     */
+    public FetchReport fillIn(List<java.time.LocalDate> days, java.util.Collection<Topic> topics, java.util.Collection<Category> desks,
+                              Consumer<String> progress, BooleanSupplier cancelled) throws IOException {
+        List<FeedSource> feeds = com.linkeddesk.feeds.FillIn.feeds(topics, desks, days);
+        Consumer<String> p = progress == null ? null : m -> progress.accept("Filling in " + days.size() + (days.size() == 1 ? " day: " : " days: ") + m);
+        FetchReport r = download(feeds, true, "fill in " + days.size() + " days", p, cancelled, null);
+        try { filledIn.addAll(r.addedArticles.stream().map(a -> a.id).toList()); }
+        catch (IOException e) { Logs.error("Saving the filled-in list", e); }
+        r.filledIn = r.totalAdded;
+        r.filledDays = days.size();
+        return r;
+    }
+
+    /** One feed tried without saving anything: how many items it lists, about how many a day it publishes, or why it failed. */
+    public record FeedTest(FeedSource feed, int items, double perDay, String error) {
+        public boolean ok() { return error == null; }
+    }
+
+    /** Tries feeds without saving articles or touching feed health (FET-F11: test a pack before adding it). */
+    public List<FeedTest> testFeeds(List<FeedSource> feeds, BooleanSupplier cancelled) {
+        FeedHealth scratch;
+        try { scratch = new FeedHealth(java.nio.file.Files.createTempFile("pack-test", ".tsv")); }
+        catch (IOException e) { scratch = new FeedHealth(AppPaths.home().resolve(".pack-test.tsv")); }
+        FeedHealth h = scratch;
+        java.util.Map<FeedSource, FeedTest> out = new java.util.concurrent.ConcurrentHashMap<>();
+        fetcher.fetchAll(feeds, h, fi -> {
+            if (fi.ok()) {
+                h.recordListing(fi.feed(), fi.items(), System.currentTimeMillis());
+                FeedHealth.Entry e = h.get(fi.feed().url());
+                out.put(fi.feed(), new FeedTest(fi.feed(), fi.items().size(), e.publishedPerDay, fi.items().isEmpty() ? "No articles in the feed" : null));
+            } else out.put(fi.feed(), new FeedTest(fi.feed(), 0, 0, fi.error() == null ? "Failed" : fi.error()));
+        }, cancelled);
+        try { java.nio.file.Files.deleteIfExists(h.file()); } catch (IOException ignored) { /* temp file */ }
+        List<FeedTest> list = new ArrayList<>();
+        for (FeedSource f : feeds) list.add(out.getOrDefault(f, new FeedTest(f, 0, 0, "Not tried")));
+        return list;
+    }
+
+    /** Downloads just these feeds now (after a pack is added). */
+    public FetchReport fetchFeeds(List<FeedSource> feeds, String who, Consumer<String> progress, BooleanSupplier cancelled) throws IOException {
+        return download(feeds, true, who, progress, cancelled, null);
+    }
+
+    /** Estimated new articles a day and disk a year under a plan, from how the current feeds behave (FET-F10). */
+    public com.linkeddesk.feeds.DownloadVolume.Estimate volumeEstimate(com.linkeddesk.feeds.DownloadVolume.Plan plan) {
+        List<com.linkeddesk.feeds.DownloadVolume.FeedStat> stats = new ArrayList<>();
+        int topics = 0;
+        try {
+            for (FeedSource f : FeedCatalog.load()) stats.add(stat(f));
+            for (Topic t : TopicCatalog.load()) if (!t.paused()) for (FeedSource f : t.feeds()) { stats.add(stat(f)); topics++; }
+        } catch (RuntimeException e) { Logs.error("Reading feeds for the estimate", e); }
+        return com.linkeddesk.feeds.DownloadVolume.estimate(plan, stats, topics, bytesPerArticle());
+    }
+
+    private com.linkeddesk.feeds.DownloadVolume.FeedStat stat(FeedSource f) {
+        FeedHealth.Entry e = health.find(f.url());
+        return new com.linkeddesk.feeds.DownloadVolume.FeedStat(e == null ? 0 : e.itemsListed, e == null ? 0 : e.publishedPerDay, f.isTopic());
+    }
+
+    /** Disk used per saved article (whole data folder ÷ articles), so estimates match this PC; about 1.1 KB at first. */
+    public double bytesPerArticle() {
+        int n = store.size();
+        if (n < 200) return 1100;
+        long bytes = 0;
+        try (var walk = java.nio.file.Files.walk(AppPaths.home())) {
+            bytes = walk.filter(java.nio.file.Files::isRegularFile).mapToLong(p -> { try { return java.nio.file.Files.size(p); } catch (IOException ex) { return 0; } }).sum();
+        } catch (IOException | RuntimeException e) { return 1100; }
+        return Math.max(300, (double) bytes / n);
+    }
+
+    /** New articles kept per day for the last {@code days} days, oldest first, from the feed health records. */
+    public java.util.TreeMap<java.time.LocalDate, Integer> downloadsPerDay(int days) {
+        java.time.LocalDate today = java.time.LocalDate.now();
+        java.util.TreeMap<java.time.LocalDate, Integer> out = new java.util.TreeMap<>();
+        for (int i = days - 1; i >= 0; i--) out.put(today.minusDays(i), 0);
+        for (FeedHealth.Entry e : health.entries())
+            e.addedPerDay.forEach((d, n) -> out.computeIfPresent(d, (k, v) -> v + n));
+        return out;
+    }
+
+    /** New articles per feed over the last {@code days} days, busiest first (feeds with none left out). */
+    public List<java.util.Map.Entry<String, Integer>> downloadsPerFeed(int days) {
+        java.time.LocalDate from = java.time.LocalDate.now().minusDays(days - 1L);
+        java.util.Map<String, Integer> m = new java.util.HashMap<>();
+        for (FeedHealth.Entry e : health.entries()) {
+            int n = e.addedPerDay.tailMap(from, true).values().stream().mapToInt(Integer::intValue).sum();
+            if (n > 0) m.merge(e.name.isBlank() ? e.url : e.name, n, Integer::sum);
+        }
+        List<java.util.Map.Entry<String, Integer>> list = new ArrayList<>(m.entrySet());
+        list.sort((a, b) -> b.getValue() - a.getValue());
+        return list;
+    }
+
+    /**
+     * True the first time it's asked on a day (and remembers it): downloading every few hours shouldn't open the
+     * briefing or run the daily Claude work each time (FET-F10).
+     */
+    public boolean claimDailyExtras() {
+        String today = java.time.LocalDate.now().toString();
+        synchronized (settings) {
+            settings.reload();
+            if (today.equals(settings.dailyExtrasDay())) return false;
+            settings.setDailyExtrasDay(today);
+            try { settings.save(); } catch (Exception e) { Logs.error("Saving settings", e); }
+            return true;
+        }
+    }
+
+    /** Saves one feed's items, records its health and topic hits, and adds it to the report. */
+    private void saveFeed(FeedFetcher.FeedItems fi, boolean keepFull, FetchReport report, Consumer<List<String>> foundIds, FeedHealth health) {
+        int added = 0;
+        try {
+            if (fi.ok()) {
+                List<Article> items = fi.items();
+                if (!keepFull) items = items.stream().map(x -> x.fullText.isEmpty() ? x
+                        : new Article(x.id, x.url, x.title, x.summary, x.source, x.feedCategory, x.published, x.fetched, x.kind, "")).toList();
+                List<Article> newOnes = store.addAll(items);
+                added = newOnes.size();
+                report.addedArticles.addAll(newOnes);
+                if (foundIds != null) foundIds.accept(fi.items().stream().map(store::canonicalId).toList());
+                if (fi.feed().isTopic()) {
+                    List<String> canon = fi.items().stream().map(store::canonicalId).toList();
+                    topicHits.add(fi.feed().topic(), canon, System.currentTimeMillis());
+                }
+                health.recordSuccess(fi.feed(), added, fi.notModified(), fi.etag(), fi.lastModified(), System.currentTimeMillis());
+            } else if (!"Cancelled".equals(fi.error())) {
+                health.recordFailure(fi.feed(), fi.error(), System.currentTimeMillis());
+            }
+        } catch (IOException e) {
+            Logs.error("Saving articles from " + fi.feed().name(), e);
+        }
+        report.totalAdded += added;
+        report.add(new FetchReport.FeedResult(fi.feed(), fi.items().size(), added, fi.error(), fi.notModified(), false, fi.attempts()));
+    }
+
+    /** Which feeds keep their articles first when today's limit is near: your topics, then outlets by weight (Sources). */
+    double feedPriority(FeedSource f, List<Article> items) {
+        if (f.isTopic()) return 10;
+        double w = 0; int n = 0;
+        com.linkeddesk.alerts.Sources src = sources();
+        for (Article a : items) { w += src.weight(a.source); n++; }
+        return n == 0 ? 1 : w / n;
     }
 
     /** Analyses articles published in the last {@code days} days (0 = all history), leaving out muted outlets. */

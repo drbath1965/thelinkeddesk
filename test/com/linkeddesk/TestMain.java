@@ -35,6 +35,7 @@ public final class TestMain {
         com.linkeddesk.ai.P10Test.run(c);
         com.linkeddesk.ai.P11Test.run(c);
         com.linkeddesk.service.P12Test.run(c);
+        com.linkeddesk.service.P13Test.run(c);
         System.out.println();
         System.out.println(c.passed() + " checks passed, " + c.failures().size() + " failed");
         c.failures().forEach(f -> System.out.println("  FAILED: " + f));

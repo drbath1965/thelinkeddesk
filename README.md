@@ -1,4 +1,4 @@
-# The Linked Desk 1.12.0
+# The Linked Desk 1.13.0
 
 A Windows desktop app that downloads world news every day, keeps every article, groups reports of the same event into one story, and links related stories across World, Finance, Politics, Society & Climate, Tech & Science, and Defense & Space. Follow your own topics and search everything you've ever downloaded.
 
@@ -74,10 +74,17 @@ Opening the app a second time just brings the open window to the front.
 - **Help > Check this PC** checks Java, the daily task (and that it runs this copy), the saved API key, notifications, email, feeds, the data folder and free space, the search index, backups, the screen and scaling, and updates, and says how to fix anything that isn't right. **Send a test email**, **Show a test notification**, and **Save report…** for a text copy.
 - Only one download runs at a time: if the scheduled task is running, the window waits for it, and vice versa.
 
+## How much news (1.13)
+- **News > How much news…** sets how much is downloaded: **Light** (once a day, at most 15 new articles per feed and 600 a day), **Standard** (once a day, everything the feeds list), **More** (every 4 hours; topics also searched in Google News UK), **Maximum** (every hour; topics searched in 5 English-language editions) or **Custom** (every 1/2/4/6/12 hours, a limit per feed per download, a limit per day, and how many editions topics search). Feeds only list their newest 10–50 articles, so busy feeds lose articles between once-a-day downloads; downloading more often is what catches them.
+- The window shows the estimate for your own feeds (new articles a day and disk a year, from how fast each feed has been publishing) and what was actually downloaded: per day for 30 days and per feed for 7 days.
+- With a daily limit, your topics and the outlets you weight highest (Sources) keep their articles first; when it's reached, the download says so and how many were skipped. Downloading every few hours also runs from the Windows task when the app is closed (the task is updated when you save). The briefing, daily Claude work and email still happen once a day, after the first download.
+- **News > Feed packs…** adds ready-made sets: Europe, Asia & Pacific, Middle East & Africa, the Americas, Business & markets, Defense & Space+, Tech & science+, and Google News editions for the UK, India, Australia, Canada, Ireland, South Africa, Singapore and Nigeria. **Test** shows each feed's articles and rate; **Add pack** adds only the feeds that worked and downloads them straight away; **Remove pack** takes the whole pack out in one click. Feeds you already have are left out.
+- **News > Fill in past days…** fills in up to 30 days for chosen topics and desks with Google News searches limited to one day each, with an estimate first. Articles you already have are skipped; new ones are marked *filled in*. It also happens automatically (up to 7 days) after the PC was off for a day or more (a setting in the same window).
+
 ## Your data (`%USERPROFILE%\LinkedDesk`)
 - `feeds.txt` – feed list (64 to start; edit freely, no limit). `topics.txt` – your topics.
 - `data\articles-YYYY-MM.tsv` – every article ever downloaded (opens in Excel); months older than 6 months become `articles-YYYY-MM.tsv.gz` (any zip tool opens them, or Tools > Archive and backup > Save as CSV). `data\index\` – the search index (rebuilt by itself; safe to delete). Nothing is deleted or capped. `data\backup\` – weekly copy of the current month. `data\topic-hits.tsv` – which topic found which article.
-- `feed-health.tsv`, `settings.properties`, `logs\` (`fetch-YYYY-MM.log`, `errors.log`).
+- `feed-health.tsv` (also how many items each feed lists and publishes a day), `filled-in.txt` (articles added by filling in past days), `settings.properties`, `logs\` (`fetch-YYYY-MM.log`, `errors.log`).
 - `claude-usage.tsv` (every Claude request and its cost), `claude-cache.tsv` (answers already paid for), `link-checks.tsv` (Claude's verdicts on links), `digests\YYYY-MM-DD.txt` (each day's digest).
 - `translations.tsv` (English versions of headlines in other languages), `data\fulltext\` (full texts from feeds that include them).
 - `watchlist.txt` (*Name | search words | yes/no*), `watch-seen.tsv` (when you last opened each watch), `sources.txt` (*outlet = mute* or *outlet = 2*), `tickers.txt` (*SYMBOL = company names*), `pending-alerts.txt` (notifications held during quiet hours).
@@ -89,7 +96,7 @@ Opening the app a second time just brings the open window to the front.
 ## Command line
 ```
 LinkedDesk-<version>.jar               open the window
-LinkedDesk-<version>.jar --fetch       download once, notify, email the briefing, compress old months, update the index, weekly backup, exit (the daily task)
+LinkedDesk-<version>.jar --fetch       download once (and fill in missed days), notify, email the briefing, compress old months, update the index, weekly backup, exit (the daily task)
 LinkedDesk-<version>.jar --summary     print stories, links and threads (--all for all history)
 LinkedDesk-<version>.jar --print-task  show what the daily task will run
 LinkedDesk-<version>.jar --report [YYYY-MM-DD] [file.docx|.html|.md]   weekly report for the week holding that day (default: last week)
@@ -97,7 +104,7 @@ LinkedDesk-<version>.jar --backup      back up now to the folder chosen in Tools
 ```
 
 ## Build and test
-Only the JDK is needed (no downloads): `build.bat` (Windows) or `build.sh`. The build runs 358 automated checks (Claude is replaced by a local stand-in, so no key or cost is needed) and stops if any fail (`--skip-tests` to skip).
+Only the JDK is needed (no downloads): `build.bat` (Windows) or `build.sh`. The build runs 914 automated checks (Claude is replaced by a local stand-in, so no key or cost is needed) and stops if any fail (`--skip-tests` to skip).
 - Line coverage (JDK only): `java -cp out;out-test com.linkeddesk.Coverage com.linkeddesk.feeds.FeedParser com.linkeddesk.store.ArticleStore`
 - Performance: `java -Xmx2g -cp out;out-test com.linkeddesk.Benchmark 250000`
 

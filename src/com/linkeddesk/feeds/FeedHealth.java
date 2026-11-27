@@ -39,6 +39,9 @@ public final class FeedHealth {
         public int failures;
         public String etag = "", lastModified = "";
         public final TreeMap<LocalDate, Integer> addedPerDay = new TreeMap<>();
+        /** Items the feed listed last time, and how many it publishes a day (from the dates of those items; FET-F10). */
+        public int itemsListed;
+        public double publishedPerDay;
         Entry(String url) { this.url = url; }
 
         public State state(long now) {
@@ -84,6 +87,7 @@ public final class FeedHealth {
                     String[] kv = dc.split(":");
                     if (kv.length == 2) try { e.addedPerDay.put(LocalDate.parse(kv[0]), Integer.parseInt(kv[1])); } catch (RuntimeException ignored) { }
                 }
+                if (p.length >= 13) { e.itemsListed = (int) num(p[11]); try { e.publishedPerDay = Double.parseDouble(p[12]); } catch (NumberFormatException ignored) { } }
                 entries.put(e.url, e);
             }
         }
@@ -93,7 +97,7 @@ public final class FeedHealth {
     public synchronized void save() throws IOException {
         if (unreadable) load();
         com.linkeddesk.app.SafeFiles.checkSafeToSave(unreadable, file);
-        StringBuilder sb = new StringBuilder("# url\tname\tlastSuccess\tlastErrorAt\tlastError\tfailures\tpausedUntil\tetag\tlastModified\tlastChecked\taddedPerDay\n");
+        StringBuilder sb = new StringBuilder("# url\tname\tlastSuccess\tlastErrorAt\tlastError\tfailures\tpausedUntil\tetag\tlastModified\tlastChecked\taddedPerDay\titemsListed\tpublishedPerDay\n");
         for (Entry e : entries.values()) {
             StringBuilder days = new StringBuilder();
             for (var d : e.addedPerDay.entrySet()) {
@@ -102,7 +106,8 @@ public final class FeedHealth {
             }
             sb.append(String.join("\t", e.url, clean(e.name), Long.toString(e.lastSuccess), Long.toString(e.lastErrorAt),
                     clean(e.lastError), Integer.toString(e.failures), Long.toString(e.pausedUntil), clean(e.etag),
-                    clean(e.lastModified), Long.toString(e.lastChecked), days)).append('\n');
+                    clean(e.lastModified), Long.toString(e.lastChecked), days, Integer.toString(e.itemsListed),
+                    String.format(java.util.Locale.ROOT, "%.1f", e.publishedPerDay))).append('\n');
         }
         com.linkeddesk.app.SafeFiles.write(file, sb.toString());
     }
@@ -132,6 +137,22 @@ public final class FeedHealth {
         LocalDate day = LocalDate.ofInstant(Instant.ofEpochMilli(now), zone);
         e.addedPerDay.merge(day, added, Integer::sum);
         while (e.addedPerDay.size() > KEEP_DAYS) e.addedPerDay.pollFirstEntry();
+    }
+
+    /**
+     * Remembers how many items a feed lists and how fast it publishes, from the dates of those items: 20 items over
+     * 8 hours is 60 a day. Smoothed over downloads (FET-F10).
+     */
+    public synchronized void recordListing(FeedSource f, java.util.List<com.linkeddesk.model.Article> items, long now) {
+        if (items.isEmpty()) return;
+        Entry e = get(f.url());
+        long oldest = Long.MAX_VALUE, newest = 0;
+        for (var a : items) { if (a.published <= 0) continue; oldest = Math.min(oldest, a.published); newest = Math.max(newest, Math.min(a.published, now)); }
+        e.itemsListed = items.size();
+        if (oldest == Long.MAX_VALUE) return;
+        double days = Math.max(1.0 / 24, (Math.max(newest, now - 3_600_000L) - oldest) / 86_400_000.0);
+        double rate = items.size() / days;
+        e.publishedPerDay = e.publishedPerDay <= 0 ? rate : e.publishedPerDay * 0.6 + rate * 0.4;
     }
 
     public synchronized void recordFailure(FeedSource f, String error, long now) {

@@ -27,7 +27,41 @@ public record Topic(Category desk, String name, String query, String region, boo
      *    request per OR alternative, without the -words.
      * Either way the -words are applied by the app after downloading.
      */
-    public List<FeedSource> feeds() {
+    public List<FeedSource> feeds() { return feeds(1); }
+
+    /** English-language Google News editions searched at higher download settings (FET-F10). */
+    static final String[][] EDITIONS = {{"GB", "UK"}, {"IN", "India"}, {"AU", "Australia"}, {"CA", "Canada"}};
+
+    /** The search feeds at a depth: 1 = as now; 2 = + the UK edition; 3 = + India, Australia, Canada (English topics only). */
+    public List<FeedSource> feeds(int depth) {
+        List<FeedSource> out = baseFeeds();
+        String[] r = region.split("-");
+        if (!r[0].equalsIgnoreCase("en") || depth <= 1) return out;
+        String google = System.getProperty("linkeddesk.googleNewsBase", "https://news.google.com");
+        String home = r.length > 1 ? r[1].toUpperCase(Locale.ROOT) : "US";
+        int extra = com.linkeddesk.feeds.DownloadVolume.editions(depth) - 1;
+        for (String[] ed : EDITIONS) {
+            if (extra <= 0) break;
+            if (ed[0].equals(home)) continue;
+            out.add(new FeedSource(desk, "Google News (" + ed[1] + ") · " + name,
+                    google + "/rss/search?q=" + enc(query) + "&hl=en-" + ed[0] + "&gl=" + ed[0] + "&ceid=" + ed[0] + ":en", name, query));
+            extra--;
+        }
+        return out;
+    }
+
+    /** A Google News search for this topic on one past day only (FET-F12: filling in days the PC was off). */
+    public FeedSource datedFeed(java.time.LocalDate day) {
+        String[] r = region.split("-");
+        String hl = r[0].toLowerCase(Locale.ROOT);
+        String gl = r.length > 1 ? r[1].toUpperCase(Locale.ROOT) : "US";
+        String google = System.getProperty("linkeddesk.googleNewsBase", "https://news.google.com");
+        String q = query + " after:" + day + " before:" + day.plusDays(1);
+        return new FeedSource(desk, "Google News · " + name + " (" + day + ")",
+                google + "/rss/search?q=" + enc(q) + "&hl=" + hl + "-" + gl + "&gl=" + gl + "&ceid=" + gl + ":" + hl, name, query);
+    }
+
+    private List<FeedSource> baseFeeds() {
         String[] r = region.split("-");
         String hl = r[0].toLowerCase(Locale.ROOT);
         String gl = r.length > 1 ? r[1].toUpperCase(Locale.ROOT) : "US";

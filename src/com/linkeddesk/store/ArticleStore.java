@@ -311,6 +311,9 @@ public final class ArticleStore {
         if (!index().find(q, match, once)) scan(line -> !q.cannotMatch(line), match, once);
     }
 
+    /** True if neither this article nor the same headline from the same outlet is saved yet. */
+    public synchronized boolean isNew(Article a) { return !ids.contains(a.id) && !titleKeys.containsKey(titleKey(a)); }
+
     /** The id under which this article (or the same headline from the same outlet) is stored. */
     public synchronized String canonicalId(Article a) {
         if (ids.contains(a.id)) return a.id;
